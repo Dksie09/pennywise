@@ -1,6 +1,6 @@
 import XCTest
 import SwiftData
-@testable import Kharcha
+@testable import Penny
 
 final class ParserTests: XCTestCase {
     let now = Calendar.current.date(from: DateComponents(year: 2026, month: 11, day: 6, hour: 15))!

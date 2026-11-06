@@ -42,14 +42,14 @@ struct SettingsView: View {
                 }
 
                 Section("Your data") {
-                    ShareLink(item: CSVExport(txns: all), preview: SharePreview("kharcha.csv")) {
+                    ShareLink(item: CSVExport(txns: all), preview: SharePreview("penny.csv")) {
                         Label("Export CSV", systemImage: "square.and.arrow.up")
                     }
                     Button("Delete everything", role: .destructive) { confirmWipe = true }
                 }
 
                 Section("Privacy") {
-                    Text("Everything stays on this iPhone. Kharcha has no server, no login, no analytics and never connects to the internet. Messages only reach it through the Shortcuts automation you set up.")
+                    Text("Everything stays on this iPhone. Penny has no server, no login, no analytics and never connects to the internet. Messages only reach it through the Shortcuts automation you set up.")
                         .font(.callout).foregroundStyle(.secondary)
                 }
             }
@@ -100,7 +100,7 @@ struct CSVExport: Transferable {
 
     static var transferRepresentation: some TransferRepresentation {
         DataRepresentation(exportedContentType: .commaSeparatedText) { Data($0.text.utf8) }
-            .suggestedFileName("kharcha.csv")
+            .suggestedFileName("penny.csv")
     }
 }
 
@@ -108,14 +108,14 @@ struct SetupGuideView: View {
     var body: some View {
         List {
             Section {
-                Text("iPhone apps can't read your SMS or Mail directly. Instead, a Shortcuts automation hands each bank SMS / receipt to Kharcha in the background. Set it up once.")
+                Text("iPhone apps can't read your SMS or Mail directly. Instead, a Shortcuts automation hands each bank SMS / receipt to Penny in the background. Set it up once.")
                     .font(.callout)
             }
             Section("1 · Bank SMS") {
                 step("Open Shortcuts → Automation → + → Message.")
                 step("Message Contains: “Dr INR”  (add another automation with “Cr INR” for money received).")
                 step("Choose “Run Immediately” and turn off “Notify When Run”.")
-                step("Next → New Blank Automation → add action “Log Expense Message” (Kharcha).")
+                step("Next → New Blank Automation → add action “Log Expense Message” (Penny).")
                 step("Tap the Message field → choose “Shortcut Input”, then tap it again and pick “Content”.")
             }
             Section("2 · Receipt emails (Apple Mail app)") {

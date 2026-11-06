@@ -1,5 +1,5 @@
 # Generate the Xcode project with:  brew install xcodegen && xcodegen
-name: Kharcha
+name: Penny
 options:
   bundleIdPrefix: com.yourname
   deploymentTarget:
@@ -11,31 +11,31 @@ settings:
     CURRENT_PROJECT_VERSION: "1"
     CODE_SIGN_STYLE: Automatic
 targets:
-  Kharcha:
+  Penny:
     type: application
     platform: iOS
-    sources: [Kharcha]
+    sources: [Penny]
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.yourname.kharcha
+        PRODUCT_BUNDLE_IDENTIFIER: com.yourname.penny
         GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_CFBundleDisplayName: Kharcha
+        INFOPLIST_KEY_CFBundleDisplayName: Penny
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
         TARGETED_DEVICE_FAMILY: "1"
-  KharchaTests:
+  PennyTests:
     type: bundle.unit-test
     platform: iOS
-    sources: [KharchaTests]
+    sources: [PennyTests]
     dependencies:
-      - target: Kharcha
+      - target: Penny
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
 schemes:
-  Kharcha:
+  Penny:
     build:
       targets:
-        Kharcha: all
+        Penny: all
     test:
-      targets: [KharchaTests]
+      targets: [PennyTests]

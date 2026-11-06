@@ -69,7 +69,7 @@ struct MonthView: View {
                     }
                 }
             }
-            .navigationTitle("Kharcha")
+            .navigationTitle("Penny")
             .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(for: Txn.self) { TxnDetailView(txn: $0) }
             .onChange(of: month) { selectedDay = nil }

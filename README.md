@@ -1,4 +1,4 @@
-# Kharcha — personal expense tracker for iPhone
+# Penny — personal expense tracker for iPhone
 
 Logs UPI, card and receipt-email spending automatically. Everything stays on your phone.
 
@@ -16,27 +16,27 @@ brew install xcodegen
 ```
 
 ```bash
-cd Kharcha && xcodegen && open Kharcha.xcodeproj
+cd Penny && xcodegen && open Penny.xcodeproj
 ```
 
-In Xcode, open target **Kharcha**, then **Signing & Capabilities**:
+In Xcode, open target **Penny**, then **Signing & Capabilities**:
 - Choose your Apple ID as the Team
-- Change the bundle ID to something unique, e.g. `com.<yourname>.kharcha`
+- Change the bundle ID to something unique, e.g. `com.<yourname>.penny`
 
 Plug in your iPhone and press Run. On the phone, turn on **Settings → Privacy & Security → Developer Mode**, then trust your developer certificate under **Settings → General → VPN & Device Management**.
 
 > With a free Apple ID the app expires after 7 days. Press Run again to renew it; your data is kept. A paid developer account ($99/yr) extends this to a year.
 
-**No XcodeGen?** In Xcode, create a new iOS App called `Kharcha` (SwiftUI, Storage: None). Delete the generated `ContentView.swift` and `KharchaApp.swift`, then drag the `Kharcha/` folder from this repo into the project.
+**No XcodeGen?** In Xcode, create a new iOS App called `Penny` (SwiftUI, Storage: None). Delete the generated `ContentView.swift` and `PennyApp.swift`, then drag the `Penny/` folder from this repo into the project.
 
 ## 2. Set up automatic logging (one-time, in the Shortcuts app)
 
-iOS doesn't let any app read your SMS or Mail. Instead, a Shortcuts automation passes each message to Kharcha in the background. The app does not open.
+iOS doesn't let any app read your SMS or Mail. Instead, a Shortcuts automation passes each message to Penny in the background. The app does not open.
 
 **Bank SMS**
 1. Shortcuts → Automation → **+** → **Message**
 2. *Message Contains* `Dr INR` → **Run Immediately**, turn off *Notify When Run* → Next
-3. New Blank Automation → add **Log Expense Message** (Kharcha)
+3. New Blank Automation → add **Log Expense Message** (Penny)
 4. Tap *Message* → **Shortcut Input**, then tap it again and choose **Content**
 5. Optional: repeat with `Cr INR` to track money received
 
@@ -59,12 +59,12 @@ To check that it works, use the samples in the app's **Add** tab, or paste any m
 
 ## Code layout
 
-- `Kharcha/Parser.swift`: SMS and receipt parsing (pure functions, unit-tested)
-- `Kharcha/Ingestor.swift`: de-duplication and merging into the database
-- `Kharcha/Intents.swift`: the "Log Expense Message" Shortcuts action
-- `Kharcha/Models.swift`: `Txn` and `Payee` models
-- `Kharcha/Views/`: SwiftUI screens
-- `KharchaTests/`: tests built from your real message formats (run with ⌘U)
+- `Penny/Parser.swift`: SMS and receipt parsing (pure functions, unit-tested)
+- `Penny/Ingestor.swift`: de-duplication and merging into the database
+- `Penny/Intents.swift`: the "Log Expense Message" Shortcuts action
+- `Penny/Models.swift`: `Txn` and `Payee` models
+- `Penny/Views/`: SwiftUI screens
+- `PennyTests/`: tests built from your real message formats (run with ⌘U)
 
 ## Ideas for later
 - Face ID lock
