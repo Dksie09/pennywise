@@ -31,6 +31,13 @@ struct MonthView: View {
             .sorted { $0.day > $1.day }
     }
 
+    private var summaryLine: String {
+        let count = monthTxns.filter(\.countsAsSpend).count
+        var line = "\(count) payments"
+        if received > 0 { line += " · \(Fmt.money(received.rounded())) received" }
+        return line
+    }
+
     var body: some View {
         NavigationStack {
             List {
@@ -40,7 +47,7 @@ struct MonthView: View {
                         VStack(spacing: 2) {
                             Text("Spent").font(.subheadline).foregroundStyle(.secondary)
                             Text(Fmt.money(spent.rounded())).font(.system(size: 40, weight: .bold, design: .rounded))
-                            Text("\(monthTxns.filter(\.countsAsSpend).count) payments" + (received > 0 ? " · \(Fmt.money(received.rounded())) received" : ""))
+                            Text(summaryLine)
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                         CalendarGrid(month: month, totals: byDay, selected: $selectedDay)

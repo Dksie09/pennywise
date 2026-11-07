@@ -33,10 +33,7 @@ enum Ingestor {
         switch p.kind {
         case .bank:
             // 2. Same debit reported twice (two SMS, different wording).
-            if let dup = near.first(where: { t in
-                t.hasSMS && t.isCredit == p.isCredit && abs(t.amount - p.amount) < 0.01 &&
-                ((p.ref != nil && t.ref == p.ref) || (p.balance != nil && t.balance == p.balance))
-            }) {
+            if let dup = near.first(where: { isDuplicateSMS($0, p) }) {
                 dup.hashes.append(hash)
                 save(context)
                 return Result(status: .duplicate, summary: "Duplicate SMS for \(dup.vendor)")
@@ -69,11 +66,7 @@ enum Ingestor {
 
         case .receipt:
             // 2. Same receipt twice.
-            if let dup = near.first(where: { t in
-                t.hasEmail && ((p.ref != nil && t.receiptRef == p.ref) ||
-                    (Parser.vendorsMatch(t.vendor, p.vendor) && Calendar.current.isDate(t.date, inSameDayAs: p.date) &&
-                     (abs(t.amount - p.amount) < 0.01 || abs((t.foreignAmount ?? -1) - p.amount) < 0.01)))
-            }) {
+            if let dup = near.first(where: { isDuplicateReceipt($0, p) }) {
                 dup.hashes.append(hash)
                 save(context)
                 return Result(status: .duplicate, summary: "Duplicate receipt for \(dup.vendor)")
@@ -108,24 +101,51 @@ enum Ingestor {
         }
     }
 
-    /// Pick the candidate that best matches: same vendor and amount > same vendor > same INR amount; then closest in time.
+    static func isDuplicateSMS(_ t: Txn, _ p: Parsed) -> Bool {
+        guard t.hasSMS, t.isCredit == p.isCredit, abs(t.amount - p.amount) < 0.01 else { return false }
+        if let ref = p.ref, t.ref == ref { return true }
+        if let bal = p.balance, t.balance == bal { return true }
+        return false
+    }
+
+    static func isDuplicateReceipt(_ t: Txn, _ p: Parsed) -> Bool {
+        guard t.hasEmail else { return false }
+        if let ref = p.ref, t.receiptRef == ref { return true }
+        guard Parser.vendorsMatch(t.vendor, p.vendor) else { return false }
+        guard Calendar.current.isDate(t.date, inSameDayAs: p.date) else { return false }
+        let sameAmount: Bool = abs(t.amount - p.amount) < 0.01
+        let sameForeign: Bool = abs((t.foreignAmount ?? -1) - p.amount) < 0.01
+        return sameAmount || sameForeign
+    }
+
+    /// 3 = vendor and amount match, 2 = vendor only, 1 = INR amount only, 0 = no match.
+    static func matchScore(_ t: Txn, _ p: Parsed) -> Int {
+        var vendor: Bool = Parser.vendorsMatch(t.vendor, p.vendor)
+        if !vendor { vendor = Parser.vendorsMatch(t.rawPayee, p.rawPayee) }
+        if !vendor { vendor = Parser.vendorsMatch(t.rawPayee, p.vendor) }
+        if !vendor { vendor = Parser.vendorsMatch(t.vendor, p.rawPayee) }
+        let amount: Bool = t.currency == p.currency && abs(t.amount - p.amount) < 1
+        if vendor && amount { return 3 }
+        if vendor { return 2 }
+        if amount { return 1 }
+        return 0
+    }
+
+    /// Best-scoring candidate; ties go to the one closest in time.
     static func bestMatch(_ candidates: [Txn], parsed p: Parsed) -> Txn? {
-        func score(_ t: Txn) -> Int {
-            let vendor = Parser.vendorsMatch(t.vendor, p.vendor) || Parser.vendorsMatch(t.rawPayee, p.rawPayee)
-                || Parser.vendorsMatch(t.rawPayee, p.vendor) || Parser.vendorsMatch(t.vendor, p.rawPayee)
-            let sameCurrency = t.currency == p.currency
-            let amount = sameCurrency && abs(t.amount - p.amount) < 1
-            if vendor && amount { return 3 }
-            if vendor { return 2 }
-            if amount { return 1 }
-            return 0
+        var best: Txn?
+        var bestScore = 0
+        var bestGap: TimeInterval = .infinity
+        for t in candidates {
+            let score = matchScore(t, p)
+            let gap: TimeInterval = abs(t.date.timeIntervalSince(p.date))
+            if score > bestScore || (score == bestScore && score > 0 && gap < bestGap) {
+                best = t
+                bestScore = score
+                bestGap = gap
+            }
         }
-        return candidates
-            .map { ($0, score($0)) }
-            .filter { $0.1 > 0 }
-            .max { a, b in
-                a.1 != b.1 ? a.1 < b.1 : abs(a.0.date.timeIntervalSince(p.date)) > abs(b.0.date.timeIntervalSince(p.date))
-            }?.0
+        return best
     }
 
     private static func applyBankFields(_ t: Txn, _ p: Parsed) {

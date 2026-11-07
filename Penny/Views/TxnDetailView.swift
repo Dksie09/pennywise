@@ -87,7 +87,7 @@ struct TxnDetailView: View {
                 LabeledContent("Method", value: txn.method)
                 if let a = txn.account { LabeledContent("Account", value: a) }
                 if let r = txn.ref { LabeledContent("Reference", value: r) }
-                LabeledContent("Source", value: [txn.hasSMS ? "SMS" : nil, txn.hasEmail ? "Email" : nil].compactMap { $0 }.joined(separator: " + ").ifEmpty("Manual"))
+                LabeledContent("Source", value: sourceText)
                 ForEach(Array(txn.rawMessages.enumerated()), id: \.offset) { i, raw in
                     DisclosureGroup("Original message \(i + 1)") {
                         Text(raw).font(.caption.monospaced()).textSelection(.enabled)
@@ -104,6 +104,13 @@ struct TxnDetailView: View {
         }
         .navigationTitle(txn.vendor)
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var sourceText: String {
+        var parts: [String] = []
+        if txn.hasSMS { parts.append("SMS") }
+        if txn.hasEmail { parts.append("Email") }
+        return parts.isEmpty ? "Manual" : parts.joined(separator: " + ")
     }
 
     private func addTag() {

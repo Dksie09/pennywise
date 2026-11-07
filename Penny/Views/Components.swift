@@ -45,8 +45,9 @@ struct VendorAvatar: View {
     let name: String
 
     var body: some View {
-        let seed = name.lowercased().unicodeScalars.reduce(0) { ($0 &* 31 &+ Int($1.value)) & 0xFFFF }
-        let hue = Double(seed % 360) / 360
+        var seed: Int = 0
+        for u in name.lowercased().unicodeScalars { seed = (seed &* 31 &+ Int(u.value)) & 0xFFFF }
+        let hue: Double = Double(seed % 360) / 360
         Text(String(name.prefix(1)).uppercased())
             .font(.subheadline.weight(.semibold))
             .foregroundStyle(.white)
