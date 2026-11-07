@@ -10,56 +10,56 @@ struct SettingsView: View {
     @State private var confirmWipe = false
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section("Automatic logging") {
-                    NavigationLink("Set up SMS & email automation") { SetupGuideView() }
-                }
+        Form {
+            Section("Automatic logging") {
+                NavigationLink("Set up SMS & email automation") { SetupGuideView() }
+            }
 
-                Section {
-                    if payees.isEmpty {
-                        Text("None yet. Open a payment and tap “Always call this payee…”").foregroundStyle(.secondary)
-                    }
-                    ForEach(payees) { p in
-                        NavigationLink { PayeeEditView(payee: p) } label: {
-                            VStack(alignment: .leading) {
-                                Text(p.name)
-                                Text(p.key).font(.caption).foregroundStyle(.secondary)
-                            }
+            Section {
+                if payees.isEmpty {
+                    Text("None yet. Open a payment and tap “Always call this payee…”").foregroundStyle(.secondary)
+                }
+                ForEach(payees) { p in
+                    NavigationLink { PayeeEditView(payee: p) } label: {
+                        VStack(alignment: .leading) {
+                            Text(p.name)
+                            Text(p.key).font(.caption).foregroundStyle(.secondary)
                         }
                     }
-                    .onDelete { idx in idx.forEach { context.delete(payees[$0]) } }
-                } header: { Text("Saved payees") }
-
-                Section {
-                    HStack {
-                        Text("1 USD =")
-                        TextField("Rate", value: $usdRate, format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing)
-                        Text("₹")
-                    }
-                } header: { Text("Currency") } footer: {
-                    Text("Only used for foreign receipts that haven't matched a bank SMS yet.")
                 }
+                .onDelete { idx in idx.forEach { context.delete(payees[$0]) } }
+            } header: { Text("Saved payees") }
 
-                Section("Your data") {
-                    ShareLink(item: CSVExport(txns: all), preview: SharePreview("penny.csv")) {
-                        Label("Export CSV", systemImage: "square.and.arrow.up")
-                    }
-                    Button("Delete everything", role: .destructive) { confirmWipe = true }
+            Section {
+                HStack {
+                    Text("1 USD =")
+                    TextField("Rate", value: $usdRate, format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing)
+                    Text("₹")
                 }
-
-                Section("Privacy") {
-                    Text("Everything stays on this iPhone. Penny has no server, no login, no analytics and never connects to the internet. Messages only reach it through the Shortcuts automation you set up.")
-                        .font(.callout).foregroundStyle(.secondary)
-                }
+            } header: { Text("Currency") } footer: {
+                Text("Only used for foreign receipts that haven't matched a bank SMS yet.")
             }
-            .navigationTitle("Settings")
-            .confirmationDialog("Delete all payments and saved payees?", isPresented: $confirmWipe, titleVisibility: .visible) {
-                Button("Delete everything", role: .destructive) {
-                    try? context.delete(model: Txn.self)
-                    try? context.delete(model: Payee.self)
-                    try? context.save()
+
+            Section("Your data") {
+                ShareLink(item: CSVExport(txns: all), preview: SharePreview("penny.csv")) {
+                    Label("Export CSV", systemImage: "square.and.arrow.up")
                 }
+                Button("Delete everything", role: .destructive) { confirmWipe = true }
+            }
+
+            Section("Privacy") {
+                Text("Everything stays on this iPhone. Penny has no server, no login, no analytics and never connects to the internet. Messages only reach it through the Shortcuts automation you set up.")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+        }
+        .pennyBackground()
+        .navigationTitle("Settings")
+        .navigationBarTitleDisplayMode(.inline)
+        .confirmationDialog("Delete all payments and saved payees?", isPresented: $confirmWipe, titleVisibility: .visible) {
+            Button("Delete everything", role: .destructive) {
+                try? context.delete(model: Txn.self)
+                try? context.delete(model: Payee.self)
+                try? context.save()
             }
         }
     }
@@ -75,6 +75,7 @@ struct PayeeEditView: View {
             Section("Call it") { TextField("Name", text: $payee.name) }
             Section("Auto-tag new payments") { TextField("Tag (optional)", text: $payee.defaultTag).textInputAutocapitalization(.never) }
         }
+        .pennyBackground()
         .navigationTitle(payee.name)
         .onDisappear {
             for t in all where Payee.key(for: t.rawPayee) == payee.key { t.vendor = payee.name }
@@ -130,6 +131,7 @@ struct SetupGuideView: View {
                     .font(.callout)
             }
         }
+        .pennyBackground()
         .navigationTitle("Automation setup")
     }
 

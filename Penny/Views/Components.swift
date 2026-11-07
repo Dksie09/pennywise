@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 enum Fmt {
     static func money(_ v: Double, _ currency: String = "INR") -> String {
@@ -11,6 +12,15 @@ enum Fmt {
         return f.string(from: NSNumber(value: v)) ?? String(format: "%.2f", v)
     }
 
+    /// "₹12,392.50" -> ("₹", "12,392", ".50")
+    static func parts(_ s: String) -> (symbol: String, whole: String, fraction: String) {
+        guard let i = s.firstIndex(where: \.isNumber) else { return ("", s, "") }
+        let symbol = s[..<i].trimmingCharacters(in: .whitespaces)
+        let rest = s[i...]
+        guard let dot = rest.lastIndex(of: ".") else { return (symbol, String(rest), "") }
+        return (symbol, String(rest[..<dot]), String(rest[dot...]))
+    }
+
     /// Compact for calendar cells: 850, 1.2k, 12k
     static func short(_ v: Double) -> String {
         if v >= 10_000 { return "\(Int((v / 1000).rounded()))k" }
@@ -19,44 +29,43 @@ enum Fmt {
     }
 
     static func monthTitle(_ d: Date) -> String { d.formatted(.dateTime.month(.wide).year()) }
+
+    /// "November", or "November 2025" when it isn't this year.
+    static func monthName(_ d: Date) -> String {
+        Calendar.current.isDate(d, equalTo: Date(), toGranularity: .year)
+            ? d.formatted(.dateTime.month(.wide)) : monthTitle(d)
+    }
+
+    static func dayTitle(_ d: Date) -> String {
+        let cal = Calendar.current
+        if cal.isDateInToday(d) { return "Today" }
+        if cal.isDateInYesterday(d) { return "Yesterday" }
+        return d.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
+    }
+
+    static func payments(_ n: Int) -> String { "\(n) payment\(n == 1 ? "" : "s")" }
 }
 
-struct MonthSwitcher: View {
+/// ‹ › buttons that move a month back or forward. Can't go past this month.
+struct MonthStepper: View {
     @Binding var month: Date
 
     var body: some View {
-        HStack {
+        HStack(spacing: 6) {
             Button { shift(-1) } label: { Image(systemName: "chevron.left") }
-            Spacer()
-            Text(Fmt.monthTitle(month)).font(.headline)
-            Spacer()
+                .accessibilityLabel("Previous month")
             Button { shift(1) } label: { Image(systemName: "chevron.right") }
+                .accessibilityLabel("Next month")
                 .disabled(Calendar.current.isDate(month, equalTo: Date(), toGranularity: .month))
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(CircleButtonStyle(size: 32, background: Theme.fill))
+        .sensoryFeedback(.selection, trigger: month)
     }
 
     private func shift(_ n: Int) {
-        month = Calendar.current.date(byAdding: .month, value: n, to: month) ?? month
-    }
-}
-
-struct VendorAvatar: View {
-    let name: String
-
-    /// Stable colour per vendor name (same colour every launch).
-    private var hue: Double {
-        var seed: Int = 0
-        for u in name.lowercased().unicodeScalars { seed = (seed &* 31 &+ Int(u.value)) & 0xFFFF }
-        return Double(seed % 360) / 360
-    }
-
-    var body: some View {
-        Text(String(name.prefix(1)).uppercased())
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(.white)
-            .frame(width: 36, height: 36)
-            .background(Circle().fill(Color(hue: hue, saturation: 0.45, brightness: 0.75)))
+        withAnimation(.snappy) {
+            month = Calendar.current.date(byAdding: .month, value: n, to: month) ?? month
+        }
     }
 }
 
@@ -64,38 +73,63 @@ struct TxnRow: View {
     let txn: Txn
 
     var body: some View {
-        HStack(spacing: 12) {
-            VendorAvatar(name: txn.vendor)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(txn.vendor).font(.body.weight(.medium)).lineLimit(1)
-                Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(txn.vendor).font(.body.weight(.medium)).foregroundStyle(Theme.ink).lineLimit(1)
+                .layoutPriority(1)
+            if let subtitle {
+                Text(subtitle).font(.footnote).foregroundStyle(Theme.muted).lineLimit(1)
             }
-            Spacer()
+            Spacer(minLength: 8)
             VStack(alignment: .trailing, spacing: 2) {
-                Text((txn.isCredit ? "+" : "") + Fmt.money(txn.amount, txn.currency))
-                    .font(.body.monospacedDigit())
-                    .foregroundStyle(txn.isCredit ? .green : (txn.excluded ? .secondary : .primary))
+                AmountText(value: txn.amount, currency: txn.currency, size: 16,
+                           sign: txn.isCredit ? "+" : "",
+                           color: txn.isCredit ? Theme.positive : (txn.excluded ? Theme.muted : Theme.ink))
                     .strikethrough(txn.excluded)
-                HStack(spacing: 4) {
-                    if txn.hasSMS { Image(systemName: "message.fill") }
-                    if txn.hasEmail { Image(systemName: "envelope.fill") }
-                    if txn.foreignAmount != nil, let c = txn.foreignCurrency {
-                        Text(Fmt.money(txn.foreignAmount ?? 0, c))
-                    }
+                if let f = txn.foreignAmount, let c = txn.foreignCurrency {
+                    Text(Fmt.money(f, c)).font(.footnote).foregroundStyle(Theme.muted)
+                } else if txn.excluded {
+                    Text("Not counted").font(.footnote).foregroundStyle(Theme.muted)
                 }
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
             }
         }
-        .padding(.vertical, 2)
+        .contentShape(Rectangle())
     }
 
-    private var subtitle: String {
-        var parts: [String] = []
-        if !txn.tags.isEmpty { parts.append(txn.tags.map { "#\($0)" }.joined(separator: " ")) }
-        if !txn.note.isEmpty { parts.append(txn.note) }
-        if parts.isEmpty { parts.append(txn.method) }
-        return parts.joined(separator: " · ")
+    /// Tags and note, e.g. "grocery, home · weekly shop". Nothing when there are neither.
+    private var subtitle: String? {
+        let parts = [txn.tags.joined(separator: ", "), txn.note].filter { !$0.isEmpty }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+}
+
+/// Payment rows with hairlines between them. Tap opens the payment; long-press to delete.
+struct TxnRows: View {
+    let txns: [Txn]
+    @Environment(\.modelContext) private var context
+
+    var body: some View {
+        ForEach(Array(txns.enumerated()), id: \.element.id) { i, t in
+            if i > 0 { Divider().overlay(Theme.line) }
+            NavigationLink(value: t) {
+                TxnRow(txn: t).padding(.vertical, 12)
+            }
+            .buttonStyle(.plain)
+            .contextMenu {
+                Button("Delete payment", systemImage: "trash", role: .destructive) {
+                    withAnimation { context.delete(t) }
+                }
+            }
+        }
+    }
+}
+
+struct TxnListCard: View {
+    let txns: [Txn]
+
+    var body: some View {
+        VStack(spacing: 0) { TxnRows(txns: txns) }
+            .card(padding: 16)
+            .padding(.vertical, -4)
     }
 }
 
@@ -106,11 +140,16 @@ struct TagChip: View {
 
     var body: some View {
         Button(action: action) {
-            Text(selected ? "#\(text) ✕" : "+ \(text)")
-                .font(.caption.weight(.medium))
-                .padding(.horizontal, 10).padding(.vertical, 5)
-                .background(Capsule().fill(selected ? Color.accentColor.opacity(0.18) : Color.secondary.opacity(0.12)))
+            HStack(spacing: 4) {
+                Text(text)
+                Image(systemName: selected ? "xmark" : "plus").font(.caption2.weight(.bold))
+            }
+            .font(.subheadline.weight(.medium))
+            .foregroundStyle(selected ? Theme.card : Theme.ink)
+            .padding(.horizontal, 12).padding(.vertical, 7)
+            .background(selected ? Theme.ink : Theme.fill, in: Capsule())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(selected ? "Remove tag \(text)" : "Add tag \(text)")
     }
 }

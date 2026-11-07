@@ -2,8 +2,8 @@
 
 Logs UPI, card and receipt-email spending automatically. Everything stays on your phone.
 
-- **Month view**: total spent, a calendar heat-map (tap a day to filter), and payments grouped by day
-- **Spending tab**: totals per vendor or per tag for the month
+- **Home**: what you spent this month, compared with the same days last month, plus a bar per day (tap a bar to see just that day) and every payment grouped by day
+- **Breakdown**: totals per place or per tag for the month
 - **Tap a payment** to rename the vendor, add tags or a note, see receipt line items, or mark it as a refund or "don't count"
 - **Saved payees**: e.g. a therapist's UPI name or number becomes "Therapist" with the `#health` tag, for past and future payments
 - **No double counting**: the same SMS twice, two SMS for one debit, or a bank SMS plus the receipt email for the same payment all become one entry
@@ -46,7 +46,7 @@ iOS doesn't let any app read your SMS or Mail. Instead, a Shortcuts automation p
 3. Add **Log Expense Message** with that Text
 4. Optional: repeat for `invoice` / `order`
 
-To check that it works, use the samples in the app's **Add** tab, or paste any message there.
+To check that it works, paste any bank SMS into the app's **Add payment** screen.
 
 ## How de-duplication works
 

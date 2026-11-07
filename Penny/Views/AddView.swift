@@ -3,81 +3,119 @@ import SwiftData
 
 struct AddView: View {
     @Environment(\.modelContext) private var context
+    @Environment(\.dismiss) private var dismiss
     @State private var text = ""
     @State private var result: String?
     @State private var amount = ""
     @State private var vendor = ""
     @State private var date = Date()
-    @FocusState private var focused: Bool
+    @FocusState private var focus: Field?
+
+    enum Field { case amount, vendor, message }
+
+    private var parsedAmount: Double? {
+        Double(amount.replacingOccurrences(of: ",", with: "")).flatMap { $0 > 0 ? $0 : nil }
+    }
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
-                    TextEditor(text: $text)
-                        .frame(minHeight: 140)
-                        .font(.callout)
-                        .focused($focused)
-                    Button("Add from message") {
-                        result = Ingestor.ingest(text, context: context).summary
-                        text = ""
-                        focused = false
-                    }
-                    .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    if let result { Text(result).font(.callout).foregroundStyle(.secondary) }
-                } header: {
-                    Text("Paste a bank SMS or receipt")
-                } footer: {
-                    Text("Use this for anything the automation missed. Pasting the same message twice won't double count.")
-                }
+            ScrollView {
+                VStack(spacing: 16) {
+                    manualCard
+                    Button { addManual() } label: { Text("Add payment").frame(maxWidth: .infinity) }
+                        .buttonStyle(.pill)
+                        .disabled(parsedAmount == nil)
 
-                Section("Or add by hand (cash etc.)") {
-                    TextField("Amount (₹)", text: $amount).keyboardType(.decimalPad)
-                    TextField("Paid to", text: $vendor)
-                    DatePicker("When", selection: $date)
-                    Button("Add") {
-                        guard let a = Double(amount.replacingOccurrences(of: ",", with: "")), a > 0 else { return }
-                        let name = vendor.trimmingCharacters(in: .whitespaces).ifEmpty("Cash")
-                        context.insert(Txn(date: date, amount: a, vendor: name, method: "Manual"))
-                        try? context.save()
-                        result = "Logged \(Fmt.money(a)) · \(name)"
-                        amount = ""; vendor = ""; date = Date()
-                        focused = false
+                    if let result {
+                        Label(result, systemImage: "checkmark.circle.fill")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(Theme.ink)
+                            .transition(.opacity.combined(with: .scale(0.95)))
                     }
-                    .disabled(Double(amount) == nil)
-                }
 
-                Section("Try it with a sample") {
-                    ForEach(Samples.all, id: \.0) { name, body in
-                        Button(name) { text = body }
-                    }
+                    pasteCard
+                        .padding(.top, 8)
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 32)
+                .animation(.snappy, value: result)
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .background(Theme.bg.ignoresSafeArea())
+            .navigationTitle("Add payment")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }.fontWeight(.semibold)
                 }
             }
-            .navigationTitle("Add")
-            .navigationBarTitleDisplayMode(.inline)
+            .onAppear { focus = .amount }
         }
+        .tint(Theme.accent)
+        .presentationCornerRadius(Theme.radius)
     }
-}
 
-enum Samples {
-    static let all: [(String, String)] = [
-        ("UPI · Zepto", """
-        Dr INR 139.00 - AU A/c X6977 06-NOV-2026
-        UPI/DR/617601834096/ZEPTO MARKETPLACE
-        Bal INR 49,774.79
-        Fraud? Call 180012001200/SMS BLOCK UPI to 5676767
-        """),
-        ("Card · Anthropic", """
-        Dr INR 2,399.00 - AU A/c X6977 06-NOV-2026
-        VIE-6754-356/239900-ANTHROPIC* CLAUDE SU
-        Bal INR 47,375.79
-        Fraud? Call 180012001200/SMS BLOCK <CUSTID> to 5676767
-        """),
-        ("Receipt email · HeyGen", """
-        Your receipt from HeyGen Technology Inc. #2663-1049
-        Receipt from HeyGen Technology Inc.
-        $29.00
-        Paid June 15, 2026
-        """),
-    ]
+    private var manualCard: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Amount").font(.subheadline.weight(.medium)).foregroundStyle(Theme.muted)
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text("₹").font(.system(size: 30, weight: .medium)).foregroundStyle(Theme.muted)
+                TextField("0", text: $amount)
+                    .font(.system(size: 52, weight: .medium))
+                    .monospacedDigit()
+                    .keyboardType(.decimalPad)
+                    .focused($focus, equals: .amount)
+            }
+            .padding(.top, 4)
+
+            Divider().overlay(Theme.line).padding(.vertical, 14)
+            TextField("Paid to (optional, e.g. chai stall)", text: $vendor)
+                .focused($focus, equals: .vendor)
+                .submitLabel(.done)
+            Divider().overlay(Theme.line).padding(.vertical, 14)
+            DatePicker("When", selection: $date, in: ...Date())
+                .foregroundStyle(Theme.muted)
+        }
+        .card()
+    }
+
+    private var pasteCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Or paste a bank SMS or receipt").font(.headline).foregroundStyle(Theme.ink)
+            Text("For anything the automation missed. Pasting the same message twice won’t count it twice.")
+                .font(.footnote).foregroundStyle(Theme.muted)
+
+            TextField("Paste message here", text: $text, axis: .vertical)
+                .lineLimit(4...8)
+                .font(.callout)
+                .focused($focus, equals: .message)
+                .padding(14)
+                .background(Theme.fill, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+
+            HStack(spacing: 10) {
+                if text.isEmpty, UIPasteboard.general.hasStrings {
+                    Button("Paste") { text = UIPasteboard.general.string ?? "" }
+                        .buttonStyle(.pillLight)
+                }
+                Button {
+                    result = Ingestor.ingest(text, context: context).summary
+                    text = ""
+                    focus = nil
+                } label: { Text("Add from message").frame(maxWidth: .infinity) }
+                .buttonStyle(.pill)
+                .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .card()
+    }
+
+    private func addManual() {
+        guard let a = parsedAmount else { return }
+        let name = vendor.trimmingCharacters(in: .whitespaces).ifEmpty("Cash")
+        context.insert(Txn(date: date, amount: a, vendor: name, method: "Manual"))
+        try? context.save()
+        result = "Logged \(Fmt.money(a)) · \(name)"
+        amount = ""; vendor = ""; date = Date()
+        focus = nil
+    }
 }
