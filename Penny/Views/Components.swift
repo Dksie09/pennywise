@@ -44,10 +44,14 @@ struct MonthSwitcher: View {
 struct VendorAvatar: View {
     let name: String
 
-    var body: some View {
+    /// Stable colour per vendor name (same colour every launch).
+    private var hue: Double {
         var seed: Int = 0
         for u in name.lowercased().unicodeScalars { seed = (seed &* 31 &+ Int(u.value)) & 0xFFFF }
-        let hue: Double = Double(seed % 360) / 360
+        return Double(seed % 360) / 360
+    }
+
+    var body: some View {
         Text(String(name.prefix(1)).uppercased())
             .font(.subheadline.weight(.semibold))
             .foregroundStyle(.white)
