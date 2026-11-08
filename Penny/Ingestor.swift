@@ -14,6 +14,12 @@ enum Ingestor {
 
     static let matchWindow: TimeInterval = 4 * 86_400
 
+    /// Money in that mentions a refund is a refund (lowers spending); other money in is income.
+    private static func creditType(_ p: Parsed, _ text: String) -> TxnType {
+        guard p.isCredit else { return .expense }
+        return text.lowercased().contains("refund") ? .refund : .received
+    }
+
     @discardableResult
     static func ingest(_ text: String, context: ModelContext, now: Date = Date()) -> Result {
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -55,7 +61,7 @@ enum Ingestor {
                 return Result(status: .merged, summary: "Matched SMS to \(r.vendor) receipt")
             }
             let t = Txn(date: p.date, amount: p.amount, vendor: p.vendor, rawPayee: p.rawPayee, method: p.method)
-            t.isCredit = p.isCredit
+            t.type = creditType(p, text)
             applyBankFields(t, p)
             applyPayee(t, context: context)
             t.rawMessages = [text]
@@ -89,7 +95,7 @@ enum Ingestor {
                 return Result(status: .merged, summary: "Attached receipt to \(b.vendor) payment")
             }
             let t = Txn(date: p.date, amount: p.amount, currency: p.currency, vendor: p.vendor, rawPayee: p.rawPayee, method: "Email")
-            t.isCredit = p.isCredit
+            t.type = creditType(p, text)
             t.hasEmail = true
             t.receiptRef = p.ref
             t.items = p.items

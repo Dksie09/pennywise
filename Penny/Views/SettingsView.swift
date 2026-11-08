@@ -40,6 +40,16 @@ struct SettingsView: View {
                 Text("Only used for foreign receipts that haven't matched a bank SMS yet.")
             }
 
+            Section {
+                if all.contains(where: SampleData.isSample) {
+                    Button("Remove sample payments", role: .destructive) { SampleData.remove(from: context) }
+                } else {
+                    Button("Add sample payments") { SampleData.add(to: context) }
+                }
+            } header: { Text("Try it out") } footer: {
+                Text("Fills the app with about two months of made-up payments so you can look around. Removing them leaves your real payments alone.")
+            }
+
             Section("Your data") {
                 ShareLink(item: CSVExport(txns: all), preview: SharePreview("penny.csv")) {
                     Label("Export CSV", systemImage: "square.and.arrow.up")
@@ -93,10 +103,10 @@ struct CSVExport: Transferable {
         let iso = ISO8601DateFormatter()
         let rows = txns.map { t in
             [iso.string(from: t.date), esc(t.vendor), String(format: "%.2f", t.amount), t.currency,
-             t.isCredit ? "in" : "out", t.excluded ? "yes" : "no", esc(t.tags.joined(separator: " ")), esc(t.note), t.method]
+             t.isCredit ? "in" : "out", t.excluded ? "yes" : "no", t.type.rawValue, esc(t.tags.joined(separator: " ")), esc(t.note), t.method]
                 .joined(separator: ",")
         }
-        return (["date,vendor,amount,currency,direction,excluded,tags,note,method"] + rows).joined(separator: "\n")
+        return (["date,vendor,amount,currency,direction,excluded,type,tags,note,method"] + rows).joined(separator: "\n")
     }
 
     static var transferRepresentation: some TransferRepresentation {

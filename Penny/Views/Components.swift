@@ -73,26 +73,36 @@ struct TxnRow: View {
     let txn: Txn
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(txn.vendor).font(.body.weight(.medium)).foregroundStyle(Theme.ink).lineLimit(1)
-                .layoutPriority(1)
-            if let subtitle {
-                Text(subtitle).font(.footnote).foregroundStyle(Theme.muted).lineLimit(1)
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(txn.vendor).font(.body.weight(.medium)).foregroundStyle(Theme.ink).lineLimit(1)
+                if let subtitle {
+                    Text(subtitle).font(.footnote).foregroundStyle(Theme.muted).lineLimit(1)
+                }
             }
             Spacer(minLength: 8)
             VStack(alignment: .trailing, spacing: 2) {
                 AmountText(value: txn.amount, currency: txn.currency, size: 16,
-                           sign: txn.isCredit ? "+" : "",
+                           sign: txn.isCredit ? "+" : "−",
                            color: txn.isCredit ? Theme.positive : (txn.excluded ? Theme.muted : Theme.ink))
                     .strikethrough(txn.excluded)
                 if let f = txn.foreignAmount, let c = txn.foreignCurrency {
                     Text(Fmt.money(f, c)).font(.footnote).foregroundStyle(Theme.muted)
-                } else if txn.excluded {
-                    Text("Not counted").font(.footnote).foregroundStyle(Theme.muted)
+                } else if let label = typeLabel {
+                    Text(label).font(.footnote).foregroundStyle(Theme.muted)
                 }
             }
         }
         .contentShape(Rectangle())
+    }
+
+    private var typeLabel: String? {
+        switch txn.type {
+        case .expense, .received: nil
+        case .refund: "Refund"
+        case .transfer: "Transfer"
+        case .excluded: "Not counted"
+        }
     }
 
     /// Tags and note, e.g. "grocery, home · weekly shop". Nothing when there are neither.
@@ -111,7 +121,7 @@ struct TxnRows: View {
         ForEach(Array(txns.enumerated()), id: \.element.id) { i, t in
             if i > 0 { Divider().overlay(Theme.line) }
             NavigationLink(value: t) {
-                TxnRow(txn: t).padding(.vertical, 12)
+                TxnRow(txn: t).padding(.vertical, 11)
             }
             .buttonStyle(.plain)
             .contextMenu {

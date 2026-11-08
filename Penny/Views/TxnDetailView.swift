@@ -11,11 +11,17 @@ struct TxnDetailView: View {
     @State private var saved = false
     @State private var confirmDelete = false
     @State private var showRaw = false
+    @State private var showMore = false
 
+    /// Your most used tags. Shown while typing (matching what you type), or when the payment has no tags yet.
     private var suggestions: [String] {
+        let typed = newTag.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !typed.isEmpty || txn.tags.isEmpty else { return [] }
         var counts: [String: Int] = [:]
         for t in all { for tag in t.tags { counts[tag, default: 0] += 1 } }
-        return counts.sorted { $0.value > $1.value }.map(\.key).filter { !txn.tags.contains($0) }.prefix(8).map { $0 }
+        return counts.sorted { $0.value > $1.value }.map(\.key)
+            .filter { !txn.tags.contains($0) && (typed.isEmpty || $0.hasPrefix(typed)) }
+            .prefix(5).map { $0 }
     }
 
     private var savedPayee: Payee? {
@@ -29,19 +35,25 @@ struct TxnDetailView: View {
                 hero
                 tagsCard
                 noteCard
-                if !txn.rawPayee.isEmpty && txn.hasSMS { payeeCard }
-                if !txn.items.isEmpty { itemsCard }
-                countingCard
-                detailsCard
-                Button("Delete payment", role: .destructive) { confirmDelete = true }
-                    .font(.body.weight(.medium))
-                    .frame(maxWidth: .infinity, minHeight: 52)
-                    .padding(.top, 4)
+                moreButton
+                if showMore {
+                    Group {
+                        typeCard
+                        nameCard
+                        if !txn.items.isEmpty { itemsCard }
+                        detailsCard
+                        Button("Delete payment", role: .destructive) { confirmDelete = true }
+                            .font(.body.weight(.medium))
+                            .frame(maxWidth: .infinity, minHeight: 52)
+                    }
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 32)
             .animation(.snappy, value: txn.tags)
             .animation(.snappy, value: showRaw)
+            .animation(.snappy, value: showMore)
         }
         .scrollDismissesKeyboard(.interactively)
         .background(Theme.bg.ignoresSafeArea())
@@ -58,14 +70,9 @@ struct TxnDetailView: View {
 
     private var hero: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 6) {
-                TextField("Name", text: $txn.vendor)
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(Theme.ink)
-                    .submitLabel(.done)
-                Image(systemName: "pencil").font(.footnote.weight(.semibold)).foregroundStyle(Theme.muted)
-                    .accessibilityHidden(true)
-            }
+            Text(txn.vendor.ifEmpty("Payment"))
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(Theme.ink)
             Text(txn.date.formatted(.dateTime.weekday(.wide).day().month(.wide).hour().minute()))
                 .font(.subheadline).foregroundStyle(Theme.muted)
                 .padding(.top, 2)
@@ -76,15 +83,17 @@ struct TxnDetailView: View {
                 .strikethrough(txn.excluded)
                 .padding(.top, 14)
 
-            FlowLayout {
-                Chip(text: txn.method.ifEmpty("Manual"))
-                if let f = txn.foreignAmount, let c = txn.foreignCurrency {
-                    Chip(text: "Charged \(Fmt.money(f, c))")
+            if txn.type != .expense || txn.foreignAmount != nil {
+                FlowLayout {
+                    if txn.type != .expense {
+                        Chip(text: txn.type.title, tint: txn.isCredit && !txn.excluded ? Theme.positive : Theme.muted)
+                    }
+                    if let f = txn.foreignAmount, let c = txn.foreignCurrency {
+                        Chip(text: "Charged \(Fmt.money(f, c))")
+                    }
                 }
-                if txn.isCredit { Chip(text: "Money in", tint: Theme.positive) }
-                if txn.excluded { Chip(text: "Not counted", tint: Theme.muted) }
+                .padding(.top, 12)
             }
-            .padding(.top, 12)
 
             if txn.currency != "INR" {
                 Text("No bank SMS matched yet, so totals use an estimated rate.")
@@ -97,7 +106,7 @@ struct TxnDetailView: View {
 
     private var tagsCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            cardTitle("Tags")
+            cardHeader("Tags", "Groups payments in Breakdown")
             FlowLayout {
                 ForEach(txn.tags, id: \.self) { tag in
                     TagChip(text: tag) { txn.tags.removeAll { $0 == tag } }
@@ -113,10 +122,9 @@ struct TxnDetailView: View {
                     .overlay(Capsule().strokeBorder(Theme.line, style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
             }
             if !suggestions.isEmpty {
-                Text("Recent").font(.footnote).foregroundStyle(Theme.muted).padding(.top, 4)
                 FlowLayout {
                     ForEach(suggestions, id: \.self) { s in
-                        TagChip(text: s, selected: false) { txn.tags.append(s) }
+                        TagChip(text: s, selected: false) { txn.tags.append(s); newTag = "" }
                     }
                 }
             }
@@ -126,31 +134,41 @@ struct TxnDetailView: View {
 
     private var noteCard: some View {
         VStack(alignment: .leading, spacing: 8) {
-            cardTitle("Note")
-            TextField("What was it for?", text: $txn.note, axis: .vertical)
+            cardHeader("Note", "Just for this payment")
+            TextField("e.g. birthday gift for mum", text: $txn.note, axis: .vertical)
                 .lineLimit(1...5)
                 .foregroundStyle(Theme.ink)
+                .padding(.horizontal, 14).padding(.vertical, 12)
+                .background(Theme.fill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .card()
     }
 
-    private var payeeCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            cardTitle("Bank shows")
-            Text(txn.rawPayee).font(.subheadline.monospaced()).foregroundStyle(Theme.ink)
-            if saved {
-                Label("Past and future payments to this payee will be called “\(txn.vendor)”.", systemImage: "checkmark.circle.fill")
-                    .font(.footnote.weight(.medium)).foregroundStyle(Theme.positive)
-            } else {
-                Button { rememberPayee() } label: {
-                    Text(savedPayee == nil ? "Always call it “\(txn.vendor)”" : "Update saved name to “\(txn.vendor)”")
-                        .font(.body.weight(.medium))
-                        .foregroundStyle(Theme.ink)
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity, minHeight: 48)
-                        .background(Theme.fill, in: Capsule())
+    /// Rename the payment; for bank SMS payments, optionally remember the name for this payee.
+    private var nameCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            cardTitle("Name")
+            TextField("Who you paid", text: $txn.vendor)
+                .foregroundStyle(Theme.ink)
+                .submitLabel(.done)
+                .padding(.horizontal, 14).frame(minHeight: 46)
+                .background(Theme.fill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            if !txn.rawPayee.isEmpty && txn.hasSMS {
+                Text("Bank shows \(txn.rawPayee)")
+                    .font(.footnote).foregroundStyle(Theme.muted)
+                    .padding(.top, 2)
+                if saved {
+                    Label("Past and future payments to this payee will be called “\(txn.vendor)”.", systemImage: "checkmark.circle.fill")
+                        .font(.footnote.weight(.medium)).foregroundStyle(Theme.positive)
+                        .padding(.top, 4)
+                } else if savedPayee?.name != txn.vendor {
+                    Button { rememberPayee() } label: {
+                        Text("Always call this payee “\(txn.vendor)”")
+                            .lineLimit(1)
+                    }
+                    .buttonStyle(SmallPillStyle())
+                    .padding(.top, 4)
                 }
-                .buttonStyle(.plain)
             }
         }
         .card()
@@ -167,13 +185,49 @@ struct TxnDetailView: View {
         .card()
     }
 
-    private var countingCard: some View {
-        VStack(spacing: 0) {
-            toggleRow("Money received", "A refund, or money someone sent you", isOn: $txn.isCredit)
-            Divider().overlay(Theme.line).padding(.vertical, 12)
-            toggleRow("Don’t count in totals", "For transfers to your own accounts, investments, etc.", isOn: $txn.excluded)
+    private var moreButton: some View {
+        Button { showMore.toggle() } label: {
+            HStack {
+                Text(showMore ? "Fewer details" : "More details")
+                Spacer()
+                Image(systemName: "chevron.down").rotationEffect(.degrees(showMore ? 180 : 0))
+            }
+            .font(.body.weight(.medium))
+            .foregroundStyle(Theme.ink)
+            .padding(.horizontal, 20)
+            .frame(minHeight: 56)
+            .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// One choice instead of separate switches, so there are no confusing combinations.
+    private var typeCard: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            cardTitle("Type").padding(.bottom, 4)
+            ForEach(Array(TxnType.allCases.enumerated()), id: \.element) { i, kind in
+                if i > 0 { Divider().overlay(Theme.line) }
+                Button { withAnimation(.snappy) { txn.type = kind } } label: {
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(kind.title).font(.body.weight(.medium)).foregroundStyle(Theme.ink)
+                            Text(kind.hint).font(.footnote).foregroundStyle(Theme.muted)
+                        }
+                        Spacer()
+                        Image(systemName: txn.type == kind ? "checkmark.circle.fill" : "circle")
+                            .font(.title3)
+                            .foregroundStyle(txn.type == kind ? Theme.accent : Theme.line)
+                    }
+                    .padding(.vertical, 10)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(txn.type == kind ? .isSelected : [])
+            }
         }
         .card()
+        .sensoryFeedback(.selection, trigger: txn.type)
     }
 
     private var detailsCard: some View {
@@ -186,6 +240,8 @@ struct TxnDetailView: View {
             }
             .font(.subheadline)
             .padding(.vertical, 6)
+            Divider().overlay(Theme.line)
+            detailRow("Paid with", txn.method.ifEmpty("Manual"))
             if let a = txn.account { Divider().overlay(Theme.line); detailRow("Account", a) }
             if let r = txn.ref { Divider().overlay(Theme.line); detailRow("Reference", r) }
             Divider().overlay(Theme.line)
@@ -224,7 +280,14 @@ struct TxnDetailView: View {
     // MARK: Pieces
 
     private func cardTitle(_ s: String) -> some View {
-        Text(s).font(.subheadline.weight(.medium)).foregroundStyle(Theme.muted)
+        Text(s).font(.body.weight(.medium)).foregroundStyle(Theme.ink)
+    }
+
+    private func cardHeader(_ title: String, _ hint: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title).font(.body.weight(.medium)).foregroundStyle(Theme.ink)
+            Text(hint).font(.footnote).foregroundStyle(Theme.muted)
+        }
     }
 
     private func detailRow(_ label: String, _ value: String) -> some View {
@@ -235,16 +298,6 @@ struct TxnDetailView: View {
         }
         .font(.subheadline)
         .padding(.vertical, 12)
-    }
-
-    private func toggleRow(_ title: String, _ subtitle: String, isOn: Binding<Bool>) -> some View {
-        Toggle(isOn: isOn) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.body.weight(.medium)).foregroundStyle(Theme.ink)
-                Text(subtitle).font(.footnote).foregroundStyle(Theme.muted)
-            }
-        }
-        .tint(Theme.accent)
     }
 
     private var sourceText: String {

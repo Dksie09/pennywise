@@ -96,6 +96,19 @@ extension ButtonStyle where Self == PillButtonStyle {
     static var pillLight: PillButtonStyle { PillButtonStyle(primary: false) }
 }
 
+/// Compact grey pill for secondary links inside a card, e.g. "Breakdown".
+struct SmallPillStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.subheadline.weight(.medium))
+            .foregroundStyle(Theme.ink)
+            .padding(.horizontal, 14)
+            .frame(height: 38)
+            .background(Theme.fill, in: Capsule())
+            .opacity(configuration.isPressed ? 0.6 : 1)
+    }
+}
+
 struct CircleButtonStyle: ButtonStyle {
     var size: CGFloat = 40
     var background: Color = Theme.card

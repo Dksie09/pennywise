@@ -12,7 +12,7 @@ struct CalendarView: View {
     private var monthTxns: [Txn] { all.filter { cal.isDate($0.date, equalTo: month, toGranularity: .month) } }
     private var byDay: [Date: Double] {
         Dictionary(grouping: monthTxns.filter(\.countsAsSpend)) { cal.startOfDay(for: $0.date) }
-            .mapValues { $0.reduce(0) { $0 + $1.inr(usdRate: usdRate) } }
+            .mapValues { $0.reduce(0) { $0 + $1.spend(usdRate: usdRate) } }
     }
 
     var body: some View {
@@ -56,7 +56,7 @@ struct CalendarView: View {
             let txns = monthTxns.filter { cal.isDate($0.date, inSameDayAs: day) }
             VStack(spacing: 8) {
                 SectionLabel(title: Fmt.dayTitle(day)) {
-                    if let v = totals[day] { Text(Fmt.money(v.rounded())).monospacedDigit() }
+                    if let v = totals[day], v > 0 { Text(Fmt.money(v.rounded())).monospacedDigit() }
                 }
                 if txns.isEmpty {
                     Text("Nothing spent on this day")
@@ -112,27 +112,30 @@ struct CalendarGrid: View {
         let isSel = selected.map { cal.isDate($0, inSameDayAs: day) } ?? false
         let future = day > Date()
         let today = cal.isDateInToday(day)
+        // Fill strength = how much you spent. Selection = a ring. Today = bold number with a dot.
         return Button {
             selected = isSel ? nil : cal.startOfDay(for: day)
         } label: {
             VStack(spacing: 2) {
                 Text("\(cal.component(.day, from: day))")
-                    .font(.subheadline.weight(today || isSel ? .semibold : .regular))
+                    .font(.subheadline.weight(today ? .bold : .regular))
+                    .foregroundStyle(future ? Theme.muted.opacity(0.5) : Theme.ink)
                 Text(v > 0 ? Fmt.short(v) : " ")
                     .font(.system(size: 10, weight: .medium))
-                    .opacity(isSel ? 0.8 : 1)
-                    .foregroundStyle(isSel ? Theme.card : Theme.muted)
+                    .foregroundStyle(Theme.muted)
             }
-            .foregroundStyle(isSel ? Theme.card : (future ? Theme.muted.opacity(0.5) : Theme.ink))
             .frame(maxWidth: .infinity, minHeight: 48)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(isSel ? Theme.ink : Theme.accent.opacity(v > 0 ? 0.06 + 0.3 * (v / maxV) : 0))
+                    .fill(Theme.accent.opacity(v > 0 ? 0.08 + 0.42 * (v / maxV) : 0))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(Theme.ink.opacity(today && !isSel ? 0.25 : 0), lineWidth: 1)
+                    .strokeBorder(Theme.ink, lineWidth: isSel ? 2 : 0)
             )
+            .overlay(alignment: .top) {
+                if today { Circle().fill(Theme.accent).frame(width: 4, height: 4).padding(.top, 4) }
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

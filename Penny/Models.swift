@@ -16,6 +16,7 @@ final class Txn {
     var currency: String = "INR"
     var isCredit: Bool = false          // money in (refund, received)
     var excluded: Bool = false          // e.g. transfer to your own account
+    var kind: String = ""               // TxnType raw value; empty for payments logged before types existed
     var rawPayee: String = ""           // exactly as the bank shows it, e.g. "ZEPTO MARKETPLACE"
     var vendor: String = ""             // friendly name shown in the app
     var method: String = ""             // UPI / Card / Email / Manual
@@ -84,7 +85,61 @@ enum Rates {
     }
 }
 
+/// What kind of payment this is. Decides whether and how it counts toward "spent".
+enum TxnType: String, CaseIterable, Identifiable {
+    case expense, refund, received, transfer, excluded
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .expense: "Expense"
+        case .refund: "Refund"
+        case .received: "Money received"
+        case .transfer: "Transfer"
+        case .excluded: "Excluded"
+        }
+    }
+
+    var hint: String {
+        switch self {
+        case .expense: "Counts toward what you spent"
+        case .refund: "Money back for something you bought. Lowers what you spent"
+        case .received: "Salary, or money someone sent you. Not part of spending"
+        case .transfer: "Between your own accounts, or into savings. Not counted"
+        case .excluded: "Leave this out of all totals"
+        }
+    }
+}
+
 extension Txn {
     func inr(usdRate: Double) -> Double { Rates.toINR(amount, currency, usdRate: usdRate) }
-    var countsAsSpend: Bool { !isCredit && !excluded }
+
+    /// Stored in `kind`, and mirrored into `isCredit` / `excluded` so older code and CSV export stay correct.
+    var type: TxnType {
+        get {
+            if let t = TxnType(rawValue: kind) { return t }
+            return excluded ? .excluded : (isCredit ? .received : .expense)
+        }
+        set {
+            kind = newValue.rawValue
+            switch newValue {
+            case .expense: isCredit = false; excluded = false
+            case .refund, .received: isCredit = true; excluded = false
+            case .transfer, .excluded: excluded = true
+            }
+        }
+    }
+
+    /// Expenses and refunds both affect what you spent.
+    var countsAsSpend: Bool { type == .expense || type == .refund }
+
+    /// What this payment adds to "spent": expenses add, refunds take away, everything else is ignored.
+    func spend(usdRate: Double) -> Double {
+        switch type {
+        case .expense: inr(usdRate: usdRate)
+        case .refund: -inr(usdRate: usdRate)
+        default: 0
+        }
+    }
 }

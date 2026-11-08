@@ -28,13 +28,13 @@ struct VendorsView: View {
                 map[t.vendor, default: []].append(t)
             }
         }
-        return map.map { Bucket(name: $0.key, total: $0.value.reduce(0) { $0 + $1.inr(usdRate: usdRate) }, txns: $0.value) }
+        return map.map { Bucket(name: $0.key, total: $0.value.reduce(0) { $0 + $1.spend(usdRate: usdRate) }, txns: $0.value) }
             .sorted { $0.total > $1.total }
     }
 
     var body: some View {
         let b = buckets
-        let monthTotal = monthTxns.reduce(0) { $0 + $1.inr(usdRate: usdRate) }
+        let monthTotal = monthTxns.reduce(0) { $0 + $1.spend(usdRate: usdRate) }
         ScrollView {
             VStack(spacing: 16) {
                 VStack(alignment: .leading, spacing: 0) {
