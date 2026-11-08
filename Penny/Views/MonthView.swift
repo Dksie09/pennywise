@@ -5,7 +5,6 @@ struct MonthView: View {
     @Binding var month: Date
     @Query(sort: \Txn.date, order: .reverse) private var all: [Txn]
     @AppStorage("usdRate") private var usdRate = 88.0
-    @Environment(\.modelContext) private var context
     @State private var selectedDay: Date?
     @State private var adding = false
 
@@ -150,11 +149,6 @@ struct MonthView: View {
                 Text("Nothing in \(Fmt.monthName(month))").font(.headline).foregroundStyle(Theme.ink)
                 Text("Payments appear here automatically once SMS logging is set up in Settings. You can also add one by hand.")
                     .font(.subheadline).foregroundStyle(Theme.muted).multilineTextAlignment(.center)
-                if all.isEmpty {
-                    Button("Show sample data") { SampleData.add(to: context) }
-                        .buttonStyle(SmallPillStyle())
-                        .padding(.top, 6)
-                }
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)

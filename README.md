@@ -1,10 +1,13 @@
-# Penny — personal expense tracker for iPhone
+# Pennywise — personal expense tracker for iPhone
+
+Shows as **Pennywise** on the home screen and **Penny** inside the app.
 
 Logs UPI, card and receipt-email spending automatically. Everything stays on your phone.
 
 - **Home**: what you spent this month, compared with the same days last month, plus a bar per day (tap a bar to see just that day) and every payment grouped by day
 - **Breakdown**: totals per place or per tag for the month
-- **Tap a payment** to rename the vendor, add tags or a note, see receipt line items, or mark it as a refund or "don't count"
+- **Calendar**: the month as a grid, shaded by how much you spent each day
+- **Tap a payment** to add tags or a note. Under *More details*: rename it, set its type (expense, refund, money received, transfer, excluded), see receipt items and the original SMS
 - **Saved payees**: e.g. a therapist's UPI name or number becomes "Therapist" with the `#health` tag, for past and future payments
 - **No double counting**: the same SMS twice, two SMS for one debit, or a bank SMS plus the receipt email for the same payment all become one entry
 - **Private**: no server, no login, no analytics, no network calls. Data is stored with SwiftData on the device. You can export to CSV.
@@ -13,21 +16,21 @@ Logs UPI, card and receipt-email spending automatically. Everything stays on you
 
 ```bash
 brew install xcodegen
+cd penny && xcodegen && open Penny.xcodeproj
 ```
 
-```bash
-cd Penny && xcodegen && open Penny.xcodeproj
-```
+Signing is preset in `project.yml` (`DEVELOPMENT_TEAM`, bundle ID `com.dksie09.pennywise`). If you build with a different Apple ID, change those two values and run `xcodegen` again.
 
-In Xcode, open target **Penny**, then **Signing & Capabilities**:
-- Choose your Apple ID as the Team
-- Change the bundle ID to something unique, e.g. `com.<yourname>.penny`
+1. Plug your iPhone into the Mac with a cable and unlock it. Tap **Trust** if asked.
+2. In Xcode's toolbar, pick your iPhone as the run destination, then press **Run** (⌘R).
+3. First time only, on the phone:
+   - **Settings → Privacy & Security → Developer Mode** → on, then restart the phone
+   - After the first install, **Settings → General → VPN & Device Management** → your Apple ID → **Trust**
+4. Press Run again. Pennywise opens on your phone.
 
-Plug in your iPhone and press Run. On the phone, turn on **Settings → Privacy & Security → Developer Mode**, then trust your developer certificate under **Settings → General → VPN & Device Management**.
+> With a free Apple ID the app stops opening after 7 days. Plug in and press Run again to renew it; your data is kept. A paid developer account ($99/yr) extends this to a year.
 
-> With a free Apple ID the app expires after 7 days. Press Run again to renew it; your data is kept. A paid developer account ($99/yr) extends this to a year.
-
-**No XcodeGen?** In Xcode, create a new iOS App called `Penny` (SwiftUI, Storage: None). Delete the generated `ContentView.swift` and `PennyApp.swift`, then drag the `Penny/` folder from this repo into the project.
+**No XcodeGen?** In Xcode, create a new iOS App called `Penny` (display name Pennywise) (SwiftUI, Storage: None). Delete the generated `ContentView.swift` and `PennyApp.swift`, then drag the `Penny/` folder from this repo into the project.
 
 ## 2. Set up automatic logging (one-time, in the Shortcuts app)
 
@@ -36,7 +39,7 @@ iOS doesn't let any app read your SMS or Mail. Instead, a Shortcuts automation p
 **Bank SMS**
 1. Shortcuts → Automation → **+** → **Message**
 2. *Message Contains* `Dr INR` → **Run Immediately**, turn off *Notify When Run* → Next
-3. New Blank Automation → add **Log Expense Message** (Penny)
+3. New Blank Automation → add **Log Expense Message** (Pennywise)
 4. Tap *Message* → **Shortcut Input**, then tap it again and choose **Content**
 5. Optional: repeat with `Cr INR` to track money received
 

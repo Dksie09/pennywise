@@ -4,14 +4,14 @@ import AppIntents
 /// Runs in the background; the app does not open.
 struct LogMessageIntent: AppIntent {
     static var title: LocalizedStringResource = "Log Expense Message"
-    static var description = IntentDescription("Reads a bank SMS or receipt email and logs the payment in Penny. Duplicates are ignored automatically.")
+    static var description = IntentDescription("Reads a bank SMS or receipt email and logs the payment in Pennywise. Duplicates are ignored automatically.")
     static var openAppWhenRun: Bool = false
 
     @Parameter(title: "Message", inputOptions: String.IntentInputOptions(multiline: true))
     var text: String
 
     static var parameterSummary: some ParameterSummary {
-        Summary("Log \(\.$text) in Penny")
+        Summary("Log \(\.$text) in Pennywise")
     }
 
     @MainActor
