@@ -69,6 +69,7 @@ struct MonthView: View {
             .background(alignment: .top) {
                 ZStack(alignment: .top) {
                     Theme.bg
+                    CornerGlow()
                     StarryTop()
                 }
                 .ignoresSafeArea()

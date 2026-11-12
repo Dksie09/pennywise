@@ -107,6 +107,21 @@ struct StarryTop: View {
     }
 }
 
+/// The same soft periwinkle and pink glow, tucked into the bottom-right corner of a page.
+struct CornerGlow: View {
+    var body: some View {
+        ZStack(alignment: .bottomTrailing) {
+            Ellipse().fill(Theme.glowBlue).frame(width: 320, height: 300)
+                .blur(radius: 90).opacity(0.42).offset(x: 120, y: 110)
+            Ellipse().fill(Theme.glowPink).frame(width: 260, height: 240)
+                .blur(radius: 90).opacity(0.38).offset(x: -30, y: 150)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
 /// A softer glow (no stars) for the top of drawers.
 struct DrawerGlow: View {
     var body: some View {
@@ -196,6 +211,7 @@ extension View {
             .background(alignment: .top) {
                 ZStack(alignment: .top) {
                     Theme.bg
+                    CornerGlow()
                     StarryTop()
                 }
                 .ignoresSafeArea()
