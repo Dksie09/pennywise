@@ -46,6 +46,32 @@ enum Fmt {
     static func payments(_ n: Int) -> String { "\(n) payment\(n == 1 ? "" : "s")" }
 }
 
+/// Swipe left for the next month, right for the previous one (never past this month).
+/// Only clearly sideways drags count, so scrolling up and down is unaffected.
+struct MonthSwipe: ViewModifier {
+    @Binding var month: Date
+
+    func body(content: Content) -> some View {
+        content
+            .contentShape(Rectangle())
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 24)
+                    .onEnded { g in
+                        let dx = g.translation.width, dy = g.translation.height
+                        guard abs(dx) > 60, abs(dx) > abs(dy) * 1.5 else { return }
+                        let step = dx < 0 ? 1 : -1
+                        let cal = Calendar.current
+                        if step > 0 && cal.isDate(month, equalTo: Date(), toGranularity: .month) { return }
+                        withAnimation(.snappy) { month = cal.date(byAdding: .month, value: step, to: month) ?? month }
+                    }
+            )
+    }
+}
+
+extension View {
+    func monthSwipe(_ month: Binding<Date>) -> some View { modifier(MonthSwipe(month: month)) }
+}
+
 /// ‹ › buttons that move a month back or forward. Can't go past this month.
 struct MonthStepper: View {
     @Binding var month: Date

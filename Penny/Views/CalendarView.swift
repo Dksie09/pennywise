@@ -41,6 +41,7 @@ struct CalendarView: View {
                 .padding(.horizontal, 14).padding(.vertical, 16)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .glass(RoundedRectangle(cornerRadius: Theme.radius + 2, style: .continuous))
+                .monthSwipe($month)
 
                 dayPayments(totals).padding(.top, 4)
             }

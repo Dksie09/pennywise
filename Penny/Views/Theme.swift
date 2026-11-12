@@ -11,6 +11,7 @@ enum Theme {
     static let muted    = Color(hex: 0x6B6880)
     static let faint    = Color(hex: 0x8A879B)                  // currency symbol, paise, disabled
     static let accent   = Color(hex: 0x4A57C9)                  // links and the selected toggle only
+    static let selected = Color(hex: 0x7B6CF6)                  // a picked bar in the home chart
     static let positive = Color(hex: 0x15803D)
 
     // The starry glow

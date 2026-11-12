@@ -163,6 +163,7 @@ struct MonthView: View {
             }
         }
         .fadingGlassCard()
+        .monthSwipe($month)
         .animation(.snappy, value: selectedDay)
     }
 
@@ -281,11 +282,11 @@ struct DayBars: View {
         withAnimation(.snappy) { selected = isSelected(d) ? nil : d }
     }
 
-    /// Monochrome: ink bars, faint dots for days with nothing spent. A selected day stays ink while the rest fade.
+    /// Ink bars, faint dots for days with nothing spent. A selected day turns purple; the rest go a softer grey.
     private func color(_ d: Date, _ v: Double) -> Color {
         if d > Date() { return Theme.ink.opacity(0.06) }
         if v == 0 { return Theme.ink.opacity(0.12) }
         guard selected != nil else { return Theme.ink }
-        return isSelected(d) ? Theme.ink : Theme.ink.opacity(0.14)
+        return isSelected(d) ? Theme.selected : Theme.ink.opacity(0.32)
     }
 }
