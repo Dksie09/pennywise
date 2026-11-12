@@ -252,6 +252,7 @@ struct AddView: View {
     }
 
     /// "Who did you pay?" as a dashed, typeable tag above the amount.
+    /// A tap anywhere on the pill starts typing.
     private var payeePill: some View {
         HStack(spacing: 6) {
             TextField("Who did you pay?", text: $payee)
@@ -262,27 +263,28 @@ struct AddView: View {
                 .submitLabel(.done)
                 .focused($field, equals: .payee)
                 .onSubmit { field = nil }
-                .fixedSize()
-                .frame(minWidth: 150)
+                .frame(maxWidth: .infinity)
             if !payee.isEmpty {
                 Button { payee = "" } label: {
                     Image(systemName: "xmark").font(.caption2.weight(.bold)).foregroundStyle(Theme.faint)
+                        .frame(width: 28, height: 28)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Clear name")
             }
         }
-        .padding(.horizontal, 18)
-        .frame(height: 40)
+        .padding(.horizontal, 16)
+        .frame(width: 250, height: 44)
         .background {
             Capsule().fill(payee.isEmpty ? Color.clear : Theme.fill)
             Capsule().strokeBorder(field == .payee ? Theme.ink.opacity(0.5) : Color(hex: 0xCFCDD8),
-                                   style: StrokeStyle(lineWidth: 1.2, dash: payee.isEmpty ? [4, 3] : []))
+                                   style: StrokeStyle(lineWidth: 1.2, dash: payee.isEmpty && field != .payee ? [4, 3] : []))
         }
         .contentShape(Capsule())
-        .onTapGesture { field = .payee }
+        // Taps on the pill around the text also start typing. Simultaneous, so it never
+        // competes with the text field's own tap handling.
+        .simultaneousGesture(TapGesture().onEnded { field = .payee })
         .frame(maxWidth: .infinity)
-        .accessibilityLabel("Paid to")
     }
 
     private var topBar: some View {
