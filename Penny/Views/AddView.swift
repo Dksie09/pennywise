@@ -12,7 +12,9 @@ struct AddView: View {
     @State private var message = ""
     @FocusState private var messageFocused: Bool
     @State private var digits = ""              // as typed, e.g. "240.5"
-    @State private var payee = ""
+    @State private var payee = ""               // the chosen place ("" = none yet)
+    @State private var newPayee = ""
+    @State private var typingPayee = false
     @State private var tags: [String] = []
     @State private var newTag = ""
     @State private var typingTag = false
@@ -27,17 +29,17 @@ struct AddView: View {
 
     private var amount: Double? { Double(digits).flatMap { $0 > 0 ? $0 : nil } }
 
-    /// Places you've paid before that match what's being typed, best matches first.
-    private var placeMatches: [String] {
-        let typed = payee.trimmingCharacters(in: .whitespaces).lowercased()
-        guard !typed.isEmpty else { return [] }
-        var seen = Set<String>(), starts: [String] = [], contains: [String] = []
-        for t in all where !t.vendor.isEmpty && seen.insert(t.vendor).inserted {
-            let name = t.vendor.lowercased()
-            guard name != typed else { continue }
-            if name.hasPrefix(typed) { starts.append(t.vendor) } else if name.contains(typed) { contains.append(t.vendor) }
+    /// Places to offer: the one picked or typed first, then recent places (newest first).
+    /// While a new name is being typed, they narrow down to matches, in place.
+    private var placeOptions: [String] {
+        let typed = typingPayee ? newPayee.trimmingCharacters(in: .whitespaces).lowercased() : ""
+        var seen = Set<String>(), out: [String] = []
+        if !payee.isEmpty { seen.insert(payee); out.append(payee) }
+        for t in all where !t.isCredit && !t.vendor.isEmpty && seen.insert(t.vendor).inserted {
+            if typed.isEmpty || t.vendor.lowercased().contains(typed) { out.append(t.vendor) }
+            if out.count == 8 { break }
         }
-        return Array((starts + contains).prefix(6))
+        return out
     }
 
     /// Tags to offer: ones already picked (including new ones), then your most used.
@@ -173,18 +175,7 @@ struct AddView: View {
 
     private var manualEntry: some View {
         VStack(spacing: 0) {
-            payeePill.padding(.top, 22)
-            if field == .payee && !placeMatches.isEmpty {
-                chipRow {
-                    ForEach(placeMatches, id: \.self) { p in
-                        ChoiceChip(title: p) { payee = p; field = nil }
-                    }
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, 10)
-                .transition(.opacity)
-            }
-            amountDisplay.padding(.top, 14)
+            amountDisplay.padding(.top, 26)
             Button { pickingDate = true } label: {
                 HStack(spacing: 5) {
                     Text(dateLabel)
@@ -199,8 +190,32 @@ struct AddView: View {
             .padding(.top, 14)
             .accessibilityLabel("When: \(dateLabel)")
 
-
             VStack(alignment: .leading, spacing: 10) {
+                label("Paid to")
+                chipRow {
+                    if typingPayee {
+                        TextField("Name", text: $newPayee)
+                            .font(.subheadline)
+                            .textInputAutocapitalization(.words)
+                            .submitLabel(.done)
+                            .focused($field, equals: .payee)
+                            .onSubmit(commitPayee)
+                            .padding(.horizontal, 15).frame(width: 150, height: 38)
+                            .background(Capsule().strokeBorder(Theme.ink, lineWidth: 1.5))
+                    } else {
+                        ChoiceChip(title: "+ New", dashed: true) {
+                            typingPayee = true
+                            field = .payee
+                        }
+                    }
+                    ForEach(placeOptions, id: \.self) { p in
+                        ChoiceChip(title: p, selected: payee == p) {
+                            if typingPayee { newPayee = ""; typingPayee = false; field = nil }
+                            payee = payee == p ? "" : p
+                        }
+                    }
+                }
+
                 HStack(spacing: 4) {
                     label("Tags")
                     Text("· optional").font(.footnote).foregroundStyle(Theme.faint)
@@ -230,8 +245,7 @@ struct AddView: View {
                 }
             }
             .padding(.horizontal, 20)
-            .padding(.top, 28)
-            .animation(.snappy, value: field)
+            .padding(.top, 24)
 
             Spacer(minLength: 12)
 
@@ -247,44 +261,11 @@ struct AddView: View {
             .padding(.top, 8)
             .padding(.bottom, 8)
         }
-        .animation(.snappy, value: typingTag)
-        .onChange(of: field) { old, new in if old == .tag && new != .tag { commitTag() } }
-    }
-
-    /// "Who did you pay?" as a dashed, typeable tag above the amount.
-    /// A tap anywhere on the pill starts typing.
-    private var payeePill: some View {
-        HStack(spacing: 6) {
-            TextField("Who did you pay?", text: $payee)
-                .font(.body.weight(payee.isEmpty ? .regular : .medium))
-                .foregroundStyle(Theme.ink)
-                .multilineTextAlignment(.center)
-                .textInputAutocapitalization(.words)
-                .submitLabel(.done)
-                .focused($field, equals: .payee)
-                .onSubmit { field = nil }
-                .frame(maxWidth: .infinity)
-            if !payee.isEmpty {
-                Button { payee = "" } label: {
-                    Image(systemName: "xmark").font(.caption2.weight(.bold)).foregroundStyle(Theme.faint)
-                        .frame(width: 28, height: 28)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Clear name")
-            }
+        .onChange(of: field) { old, new in
+            // Leaving a field keeps what was typed, like pressing return.
+            if old == .tag && new != .tag { commitTag() }
+            if old == .payee && new != .payee { commitPayee() }
         }
-        .padding(.horizontal, 16)
-        .frame(width: 250, height: 44)
-        .background {
-            Capsule().fill(payee.isEmpty ? Color.clear : Theme.fill)
-            Capsule().strokeBorder(field == .payee ? Theme.ink.opacity(0.5) : Color(hex: 0xCFCDD8),
-                                   style: StrokeStyle(lineWidth: 1.2, dash: payee.isEmpty && field != .payee ? [4, 3] : []))
-        }
-        .contentShape(Capsule())
-        // Taps on the pill around the text also start typing. Simultaneous, so it never
-        // competes with the text field's own tap handling.
-        .simultaneousGesture(TapGesture().onEnded { field = .payee })
-        .frame(maxWidth: .infinity)
     }
 
     private var topBar: some View {
@@ -346,6 +327,13 @@ struct AddView: View {
 
     // MARK: Actions
 
+    private func commitPayee() {
+        let name = newPayee.trimmingCharacters(in: .whitespaces)
+        if !name.isEmpty { payee = name }
+        newPayee = ""
+        typingPayee = false
+    }
+
     private func commitTag() {
         let t = newTag.trimmingCharacters(in: .whitespaces).lowercased().replacingOccurrences(of: "#", with: "")
         if !t.isEmpty, !tags.contains(t) { tags.append(t) }
@@ -356,6 +344,7 @@ struct AddView: View {
     private func add() {
         guard let a = amount else { return }
         if typingTag { commitTag() }
+        if typingPayee { commitPayee() }
         let name = payee.trimmingCharacters(in: .whitespaces).ifEmpty("Cash")
         let t = Txn(date: date, amount: a, vendor: name, method: "Manual")
         t.tags = tags
