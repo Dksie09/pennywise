@@ -6,7 +6,8 @@ struct MonthView: View {
     @Query(sort: \Txn.date, order: .reverse) private var all: [Txn]
     @AppStorage("usdRate") private var usdRate = 88.0
     @State private var selectedDay: Date?
-    @State private var adding = false
+    @Environment(PageRouter.self) private var router
+    @AppStorage("greetingDismissedDay") private var greetingDismissedDay = ""
 
     private var cal: Calendar { .current }
     private var isThisMonth: Bool { cal.isDate(month, equalTo: Date(), toGranularity: .month) }
@@ -55,36 +56,60 @@ struct MonthView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 16) {
-                    header
+                VStack(spacing: 14) {
+                    AppHeader()
+                    if showGreeting { greeting.transition(.move(edge: .top).combined(with: .opacity)) }
                     hero
                     payments
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 32)
+                .animation(.snappy, value: showGreeting)
             }
-            .background(Theme.bg.ignoresSafeArea())
+            .background(alignment: .top) {
+                ZStack(alignment: .top) {
+                    Theme.bg
+                    StarryTop()
+                }
+                .ignoresSafeArea()
+            }
             .toolbar(.hidden, for: .navigationBar)
-            .navigationDestination(for: Txn.self) { TxnDetailView(txn: $0) }
             .onChange(of: month) { selectedDay = nil }
-            .sheet(isPresented: $adding) { AddView() }
         }
         .tint(Theme.accent)
     }
 
-    private var header: some View {
-        HStack {
-            Text("Penny").font(.title2.weight(.semibold)).foregroundStyle(Theme.ink)
-            Spacer()
-            Button { adding = true } label: { Image(systemName: "plus") }
-                .buttonStyle(CircleButtonStyle())
-                .accessibilityLabel("Add payment by hand")
-            NavigationLink { SettingsView() } label: { Image(systemName: "gearshape") }
-                .buttonStyle(CircleButtonStyle())
-                .accessibilityLabel("Settings")
+    // MARK: Greeting
+
+    private var todayKey: String { Date().formatted(.iso8601.year().month().day()) }
+
+    /// A small hello from Penny, once a day, until dismissed.
+    private var showGreeting: Bool { isThisMonth && !all.isEmpty && greetingDismissedDay != todayKey }
+
+    private var greeting: some View {
+        let hour = cal.component(.hour, from: Date())
+        let hello = hour < 12 ? "Good morning!" : hour < 17 ? "Good afternoon!" : "Good evening!"
+        let n = all.filter { $0.countsAsSpend && cal.isDateInToday($0.date) }.count
+        return HStack(spacing: 10) {
+            PennyArt.wave.image(height: 42).frame(width: 48)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(hello).font(.subheadline.weight(.semibold)).foregroundStyle(Theme.ink)
+                Text(n == 0 ? "Nothing spent yet today." : "\(Fmt.payments(n)) tucked away today.")
+                    .font(.footnote).foregroundStyle(Theme.muted)
+            }
+            Spacer(minLength: 0)
+            Button { greetingDismissedDay = todayKey } label: {
+                Image(systemName: "xmark").font(.caption.weight(.semibold)).foregroundStyle(Theme.faint)
+                    .frame(width: 32, height: 32).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Dismiss greeting")
         }
-        .padding(.top, 8)
+        .padding(.leading, 6).padding(.trailing, 8).padding(.vertical, 8)
+        .glass(RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
+
+    // MARK: Total
 
     private var heroLabel: String {
         guard let d = selectedDay else { return "Spent in \(Fmt.monthName(month))" }
@@ -113,51 +138,40 @@ struct MonthView: View {
                 }
             }
 
-            AmountText(value: spent.rounded(), size: 52, weight: .medium)
+            AmountText(value: spent.rounded(), size: 54, weight: .medium)
                 .contentTransition(.numericText(value: spent))
-                .padding(.top, 8)
+                .padding(.top, 4)
 
             if let c = comparison {
                 Chip(text: c.text, icon: c.up ? "arrow.up" : "arrow.down")
-                    .padding(.top, 10)
+                    .padding(.top, 6)
                     .accessibilityLabel("\(c.text.replacingOccurrences(of: " vs", with: c.up ? " more than" : " less than"))")
             }
 
-            DayBars(month: month, totals: byDay, selected: $selectedDay)
-                .frame(height: 100)
-                .padding(.top, 24)
-
-            HStack(spacing: 8) {
-                NavigationLink { VendorsView(month: $month) } label: {
-                    Label("Breakdown", systemImage: "chart.bar.xaxis")
+            if all.isEmpty {
+                // Nothing logged ever: a quiet row of dots instead of an empty chart.
+                HStack(spacing: 4) {
+                    ForEach(0..<30, id: \.self) { _ in Capsule().fill(Theme.ink.opacity(0.08)).frame(height: 6) }
                 }
-                NavigationLink { CalendarView(month: $month) } label: {
-                    Label("Calendar", systemImage: "calendar")
-                }
+                .padding(.top, 18)
+                .accessibilityHidden(true)
+            } else {
+                DayBars(month: month, totals: byDay, selected: $selectedDay)
+                    .frame(height: 100)
+                    .padding(.top, 20)
             }
-            .buttonStyle(SmallPillStyle())
-            .padding(.top, 20)
         }
-        .card()
+        .fadingGlassCard()
         .animation(.snappy, value: selectedDay)
     }
 
     @ViewBuilder private var payments: some View {
-        if monthTxns.isEmpty {
-            VStack(spacing: 10) {
-                Image(systemName: "tray").font(.title2).foregroundStyle(Theme.muted)
-                Text("Nothing in \(Fmt.monthName(month))").font(.headline).foregroundStyle(Theme.ink)
-                Text("Payments appear here automatically once SMS logging is set up in Settings. You can also add one by hand.")
-                    .font(.subheadline).foregroundStyle(Theme.muted).multilineTextAlignment(.center)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
-            .card()
+        if all.isEmpty {
+            firstLaunch
+        } else if monthTxns.isEmpty {
+            NappingPenny(title: "Nothing logged in \(Fmt.monthName(month))")
         } else if shown.isEmpty {
-            Text("No payments on this day")
-                .font(.subheadline).foregroundStyle(Theme.muted)
-                .frame(maxWidth: .infinity)
-                .card()
+            NappingPenny(title: "Nothing spent this day")
         } else {
             ForEach(groups) { g in
                 VStack(spacing: 8) {
@@ -169,6 +183,35 @@ struct MonthView: View {
                 .padding(.top, 8)
             }
         }
+    }
+}
+
+extension MonthView {
+    /// Before anything has been logged: Penny naps, and the way forward is one button.
+    var firstLaunch: some View {
+        VStack(spacing: 0) {
+            PennyArt.sleep.image(height: 88)
+            Text("Nothing logged yet")
+                .font(Theme.serif(28)).foregroundStyle(Theme.ink)
+                .padding(.top, 12)
+            Text("Penny’s napping until your first payment. Set up automatic logging once and bank SMS land here on their own.")
+                .font(.subheadline).foregroundStyle(Theme.muted)
+                .multilineTextAlignment(.center).lineSpacing(2)
+                .padding(.top, 6)
+            NavigationLink { SetupGuideView() } label: {
+                Text("Set up automatic logging").frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.pill)
+            .padding(.top, 18)
+            Button("Add a payment by hand") { router.adding = true }
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(Theme.accent)
+                .frame(minHeight: 44)
+                .padding(.top, 6)
+        }
+        .padding(.top, 10)
+        .frame(maxWidth: .infinity)
+        .card(padding: 22)
     }
 }
 
@@ -237,10 +280,11 @@ struct DayBars: View {
         withAnimation(.snappy) { selected = isSelected(d) ? nil : d }
     }
 
+    /// Monochrome: ink bars, faint dots for days with nothing spent. A selected day stays ink while the rest fade.
     private func color(_ d: Date, _ v: Double) -> Color {
-        if d > Date() { return Theme.line.opacity(0.5) }
-        if v == 0 { return Theme.line }
+        if d > Date() { return Theme.ink.opacity(0.06) }
+        if v == 0 { return Theme.ink.opacity(0.12) }
         guard selected != nil else { return Theme.ink }
-        return isSelected(d) ? Theme.accent : Theme.ink.opacity(0.14)
+        return isSelected(d) ? Theme.ink : Theme.ink.opacity(0.14)
     }
 }

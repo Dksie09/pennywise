@@ -4,11 +4,11 @@ Shows as **Pennywise** on the home screen and **Penny** inside the app.
 
 Logs UPI, card and receipt-email spending automatically. Everything stays on your phone.
 
-- **Home**: what you spent this month, compared with the same days last month, plus a bar per day (tap a bar to see just that day) and every payment grouped by day
-- **Breakdown**: totals per place or per tag for the month
-- **Calendar**: the month as a grid, shaded by how much you spent each day
-- **Tap a payment** to add tags or a note. Under *More details*: rename it, set its type (expense, refund, money received, transfer, excluded), see receipt items and the original SMS
-- **Saved payees**: e.g. a therapist's UPI name or number becomes "Therapist" with the `#health` tag, for past and future payments
+- **Home**: what you spent this month, compared with the same days last month, plus a bar per day (tap a bar to see just that day) and every payment grouped by day. Swipe a payment right to open it, left to delete
+- **Penny ⌄**: tap the title to switch between Home, **Calendar** (the month as a grid, shaded by spending) and **Breakdown** (where the money went, by place or tag, as a list or tiles)
+- **Add** (+): paste a bank SMS or receipt, or add by hand with the keypad
+- **Tap a payment** to see it; **Edit** to change the name, amount, date, tags, note or type (expense, refund, money received, transfer, excluded). *More details* shows the account, reference and original SMS
+- **Saved payees**: e.g. a therapist's UPI name or number becomes "Therapist" with the `health` tag, for past and future payments
 - **No double counting**: the same SMS twice, two SMS for one debit, or a bank SMS plus the receipt email for the same payment all become one entry
 - **Private**: no server, no login, no analytics, no network calls. Data is stored with SwiftData on the device. You can export to CSV.
 

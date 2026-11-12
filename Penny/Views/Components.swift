@@ -83,7 +83,7 @@ struct TxnRow: View {
             Spacer(minLength: 8)
             VStack(alignment: .trailing, spacing: 2) {
                 AmountText(value: txn.amount, currency: txn.currency, size: 16,
-                           sign: txn.isCredit ? "+" : "−",
+                           sign: txn.isCredit ? "+" : "",
                            color: txn.isCredit ? Theme.positive : (txn.excluded ? Theme.muted : Theme.ink))
                     .strikethrough(txn.excluded)
                 if let f = txn.foreignAmount, let c = txn.foreignCurrency {
@@ -112,24 +112,29 @@ struct TxnRow: View {
     }
 }
 
-/// Payment rows with hairlines between them. Tap opens the payment; long-press to delete.
+/// Payment rows with hairlines between them.
+/// Tap or swipe right to open a payment in a drawer; swipe left for Delete (all the way to delete at once).
 struct TxnRows: View {
     let txns: [Txn]
     @Environment(\.modelContext) private var context
+    @Environment(PageRouter.self) private var router
 
     var body: some View {
         ForEach(Array(txns.enumerated()), id: \.element.id) { i, t in
-            if i > 0 { Divider().overlay(Theme.line) }
-            NavigationLink(value: t) {
-                TxnRow(txn: t).padding(.vertical, 11)
+            if i > 0 { Divider().overlay(Theme.line).padding(.horizontal, 18) }
+            SwipeRow(onOpen: { router.openTxn = t }, onDelete: { delete(t) }) {
+                TxnRow(txn: t).padding(.vertical, 12).padding(.horizontal, 18)
             }
-            .buttonStyle(.plain)
             .contextMenu {
-                Button("Delete payment", systemImage: "trash", role: .destructive) {
-                    withAnimation { context.delete(t) }
-                }
+                Button("Open", systemImage: "arrow.up.left.and.arrow.down.right") { router.openTxn = t }
+                Button("Delete payment", systemImage: "trash", role: .destructive) { delete(t) }
             }
         }
+    }
+
+    private func delete(_ t: Txn) {
+        withAnimation(.snappy) { context.delete(t) }
+        try? context.save()
     }
 }
 
@@ -138,8 +143,121 @@ struct TxnListCard: View {
 
     var body: some View {
         VStack(spacing: 0) { TxnRows(txns: txns) }
-            .card(padding: 16)
-            .padding(.vertical, -4)
+            .padding(.vertical, 2)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Theme.card)
+            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .shadow(color: Theme.shadow.opacity(0.05), radius: 14, y: 6)
+    }
+}
+
+/// A row you can swipe: right reveals "Open", left reveals "Delete".
+struct SwipeRow<Content: View>: View {
+    let onOpen: () -> Void
+    let onDelete: () -> Void
+    @ViewBuilder var content: Content
+
+    @State private var offset: CGFloat = 0
+    @State private var settled: CGFloat = 0          // 0, or -reveal while Delete is showing
+    @State private var horizontal: Bool?             // decided by the first movement of each drag
+    @State private var armed = false                 // past a threshold; used for the haptic tick
+
+    private let reveal: CGFloat = 88
+    private let fullSwipe: CGFloat = 200
+
+    var body: some View {
+        content
+            .background(Theme.card)
+            .offset(x: offset)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                if settled != 0 { close() } else { onOpen() }
+            }
+            // Actions sit behind the row and only take the width the row has slid by,
+            // so the row keeps its own height.
+            .background {
+                HStack(spacing: 0) {
+                    if offset > 0 {
+                        action("Open", "arrow.up.left.and.arrow.down.right", Theme.ink).frame(width: offset)
+                    }
+                    Spacer(minLength: 0)
+                    if offset < 0 {
+                        Button { onDelete() } label: {
+                            action("Delete", "trash", Color(hex: 0xE5484D))
+                        }
+                        .buttonStyle(.plain)
+                        .frame(width: -offset)
+                    }
+                }
+            }
+            .clipped()
+        .simultaneousGesture(drag)
+        .sensoryFeedback(.impact(weight: .light), trigger: armed) { _, new in new }
+        .accessibilityAction(named: "Open") { onOpen() }
+        .accessibilityAction(named: "Delete") { onDelete() }
+    }
+
+    private func action(_ title: String, _ icon: String, _ color: Color) -> some View {
+        VStack(spacing: 4) {
+            Image(systemName: icon).font(.system(size: 15, weight: .semibold))
+            Text(title).font(.caption.weight(.medium))
+        }
+        .foregroundStyle(.white)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(color)
+    }
+
+    private var drag: some Gesture {
+        DragGesture(minimumDistance: 14)
+            .onChanged { g in
+                if horizontal == nil { horizontal = abs(g.translation.width) > abs(g.translation.height) * 1.2 }
+                guard horizontal == true else { return }
+                var x = settled + g.translation.width
+                if x > reveal { x = reveal + (x - reveal) * 0.35 }   // a little resistance past "Open"
+                offset = x
+                armed = x > reveal * 0.9 || x < -fullSwipe
+            }
+            .onEnded { g in
+                defer { horizontal = nil; armed = false }
+                guard horizontal == true else { return }
+                let x = settled + g.translation.width
+                if x > reveal * 0.9 {
+                    close()
+                    onOpen()
+                } else if x < -fullSwipe {
+                    withAnimation(.snappy) { offset = -600 }
+                    onDelete()
+                } else if x < -reveal / 2 {
+                    withAnimation(.snappy) { offset = -reveal; settled = -reveal }
+                } else {
+                    close()
+                }
+            }
+    }
+
+    private func close() {
+        withAnimation(.snappy) { offset = 0; settled = 0 }
+    }
+}
+
+/// Empty states: sleeping Penny with a short line, e.g. "Nothing logged in October".
+struct NappingPenny: View {
+    let title: String
+    var message: String?
+
+    var body: some View {
+        VStack(spacing: 0) {
+            PennyArt.sleep.image(height: 64)
+            Text(title).font(Theme.serif(22)).foregroundStyle(Theme.ink).padding(.top, 10)
+            if let message {
+                Text(message).font(.subheadline).foregroundStyle(Theme.muted)
+                    .multilineTextAlignment(.center).padding(.top, 4)
+            }
+        }
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity)
+        .card(padding: 22)
+        .accessibilityElement(children: .combine)
     }
 }
 

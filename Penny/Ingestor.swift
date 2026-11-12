@@ -10,6 +10,8 @@ enum Ingestor {
         enum Status { case added, merged, duplicate, unrecognized }
         var status: Status
         var summary: String
+        /// The payment that was created or updated, when there is one.
+        var txn: Txn?
     }
 
     static let matchWindow: TimeInterval = 4 * 86_400
@@ -58,7 +60,7 @@ enum Ingestor {
                 r.rawMessages.append(text)
                 r.hashes.append(hash)
                 save(context)
-                return Result(status: .merged, summary: "Matched SMS to \(r.vendor) receipt")
+                return Result(status: .merged, summary: "Matched SMS to \(r.vendor) receipt", txn: r)
             }
             let t = Txn(date: p.date, amount: p.amount, vendor: p.vendor, rawPayee: p.rawPayee, method: p.method)
             t.type = creditType(p, text)
@@ -68,7 +70,7 @@ enum Ingestor {
             t.hashes = [hash]
             context.insert(t)
             save(context)
-            return Result(status: .added, summary: "\(p.isCredit ? "Received" : "Logged") \(Fmt.money(p.amount)) · \(t.vendor)")
+            return Result(status: .added, summary: "\(p.isCredit ? "Received" : "Logged") \(Fmt.money(p.amount)) · \(t.vendor)", txn: t)
 
         case .receipt:
             // 2. Same receipt twice.
@@ -92,7 +94,7 @@ enum Ingestor {
                 b.rawMessages.append(text)
                 b.hashes.append(hash)
                 save(context)
-                return Result(status: .merged, summary: "Attached receipt to \(b.vendor) payment")
+                return Result(status: .merged, summary: "Attached receipt to \(b.vendor) payment", txn: b)
             }
             let t = Txn(date: p.date, amount: p.amount, currency: p.currency, vendor: p.vendor, rawPayee: p.rawPayee, method: "Email")
             t.type = creditType(p, text)
@@ -103,7 +105,7 @@ enum Ingestor {
             t.hashes = [hash]
             context.insert(t)
             save(context)
-            return Result(status: .added, summary: "Logged \(Fmt.money(p.amount, p.currency)) · \(t.vendor) (receipt)")
+            return Result(status: .added, summary: "Logged \(Fmt.money(p.amount, p.currency)) · \(t.vendor) (receipt)", txn: t)
         }
     }
 
