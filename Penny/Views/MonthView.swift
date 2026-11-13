@@ -92,7 +92,7 @@ struct MonthView: View {
         let hello = hour < 12 ? "Good morning!" : hour < 17 ? "Good afternoon!" : "Good evening!"
         let n = all.filter { $0.countsAsSpend && cal.isDateInToday($0.date) }.count
         return HStack(spacing: 10) {
-            PennyArt.wave.image(height: 42).frame(width: 48)
+            PennyAnimation(clip: .wave, height: 42).frame(width: 48)
             VStack(alignment: .leading, spacing: 1) {
                 Text(hello).font(.subheadline.weight(.semibold)).foregroundStyle(Theme.ink)
                 Text(n == 0 ? "Nothing spent yet today." : "\(Fmt.payments(n)) tucked away today.")
@@ -192,7 +192,7 @@ extension MonthView {
     /// Before anything has been logged: Penny naps, and the way forward is one button.
     var firstLaunch: some View {
         VStack(spacing: 0) {
-            PennyArt.sleep.image(height: 88)
+            PennyAnimation(clip: .sleep, height: 88, loops: true)
             Text("Nothing logged yet")
                 .font(Theme.serif(28)).foregroundStyle(Theme.ink)
                 .padding(.top, 12)

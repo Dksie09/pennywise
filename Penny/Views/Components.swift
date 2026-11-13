@@ -273,7 +273,7 @@ struct NappingPenny: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            PennyArt.sleep.image(height: 64)
+            PennyAnimation(clip: .sleep, height: 64, loops: true)
             Text(title).font(Theme.serif(22)).foregroundStyle(Theme.ink).padding(.top, 10)
             if let message {
                 Text(message).font(.subheadline).foregroundStyle(Theme.muted)

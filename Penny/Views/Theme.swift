@@ -34,15 +34,6 @@ extension Color {
     }
 }
 
-/// Penny the duck, in her poses.
-enum PennyArt: String {
-    case hold = "Penny-hold", bite = "Penny-bite", sleep = "Penny-sleep", bag = "Penny-bag", wave = "Penny-wave"
-
-    func image(height: CGFloat) -> some View {
-        Image(rawValue).resizable().scaledToFit().frame(height: height).accessibilityHidden(true)
-    }
-}
-
 /// Soft periwinkle, pink and peach glow with a scatter of stars, pinned to the top of the screen.
 /// The stars twinkle and drift a few points; with Reduce Motion they hold still.
 struct StarryTop: View {
