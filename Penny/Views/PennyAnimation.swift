@@ -60,8 +60,9 @@ final class PennyFrames: @unchecked Sendable {
 /// it gets the latest ready frame before it, so playback never waits on a decode.
 final class PennyPlayer: @unchecked Sendable {
     let frames: PennyFrames
-    let rate: Double                 // frames per second of playback
+    let rate: Double                 // frames per second: always the clip's own speed
     let loops: Bool
+    let count: Int                   // frames actually played (a clip can be cut short)
     private(set) var start: Date?
 
     private let lock = NSLock()
@@ -70,17 +71,18 @@ final class PennyPlayer: @unchecked Sendable {
     private var lastShown: CGImage?
     private let queue = DispatchQueue(label: "penny.frames", qos: .userInitiated)
 
-    init(frames: PennyFrames, duration: Double?, loops: Bool) {
+    init(frames: PennyFrames, cut: Double?, loops: Bool) {
         self.frames = frames
-        self.rate = duration.map { Double(frames.count) / max($0, 0.1) } ?? Double(frames.fps)
+        self.rate = Double(frames.fps)
         self.loops = loops
+        self.count = cut.map { min(frames.count, max(1, Int(($0 * Double(frames.fps)).rounded()))) } ?? frames.count
     }
 
-    var duration: Double { Double(frames.count) / rate }
+    var duration: Double { Double(count) / rate }
 
     /// Decode the first frames, then start the clock.
     func prepare() async {
-        for i in 0..<min(3, frames.count) {
+        for i in 0..<min(3, count) {
             let image = frames.image(i)
             lock.withLock { if let image { cache[i] = image } }
         }
@@ -91,7 +93,7 @@ final class PennyPlayer: @unchecked Sendable {
     func index(at date: Date) -> Int {
         guard let start else { return 0 }
         let i = Int(date.timeIntervalSince(start) * rate)
-        return loops ? i % frames.count : min(i, frames.count - 1)
+        return loops ? i % count : min(i, count - 1)
     }
 
     func image(at date: Date) -> CGImage? {
@@ -111,7 +113,7 @@ final class PennyPlayer: @unchecked Sendable {
 
     /// How many frames after `i` frame `j` comes, counting around the loop.
     private func distance(from i: Int, to j: Int) -> Int {
-        loops ? (j - i + frames.count) % frames.count : (j >= i ? j - i : Int.max)
+        loops ? (j - i + count) % count : (j >= i ? j - i : Int.max)
     }
 
     /// One fixed frame (Reduce Motion).
@@ -120,7 +122,7 @@ final class PennyPlayer: @unchecked Sendable {
     private func prefetch(after i: Int) {
         for step in 0...lookahead {
             var j = i + step
-            if j >= frames.count { if loops { j %= frames.count } else { break } }
+            if j >= count { if loops { j %= count } else { break } }
             let needs = lock.withLock { cache[j] == nil && !inFlight.contains(j) }
             guard needs else { continue }
             lock.withLock { _ = inFlight.insert(j) }
@@ -138,13 +140,13 @@ final class PennyPlayer: @unchecked Sendable {
 /// Plays a Penny clip once (holding the last frame) or on a loop.
 /// Frames are picked by the screen's own clock (TimelineView), so they land in step with the display;
 /// decoding happens in the background just ahead of the playhead. A late frame is skipped, never waited for.
-/// `duration` plays the whole clip in that many seconds (faster or slower than its natural speed).
+/// Clips always play at their natural speed; `cut` stops a one-shot after that many seconds.
 /// With Reduce Motion it shows a single frame: the first for loops, the last for one-shots.
 struct PennyAnimation: View {
     let clip: PennyClip
     let height: CGFloat
     var loops = false
-    var duration: Double? = nil
+    var cut: Double? = nil
     /// Called when a one-shot clip finishes (immediately with Reduce Motion).
     var onFinish: (() -> Void)?
 
@@ -180,10 +182,10 @@ struct PennyAnimation: View {
             onFinish?()
             return
         }
-        let player = PennyPlayer(frames: frames, duration: duration, loops: loops)
+        let player = PennyPlayer(frames: frames, cut: cut, loops: loops)
 
         if reduceMotion {
-            still = await Task.detached(priority: .userInitiated) { player.still(loops ? 0 : frames.count - 1) }.value
+            still = await Task.detached(priority: .userInitiated) { player.still(loops ? 0 : player.count - 1) }.value
             onFinish?()
             return
         }
