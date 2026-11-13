@@ -1,9 +1,9 @@
 {
   "data" : [
     {
-      "filename" : "penny-bag.webp",
+      "filename" : "penny-bag.pny",
       "idiom" : "universal",
-      "universal-type-identifier" : "org.webmproject.webp"
+      "universal-type-identifier" : "public.data"
     }
   ],
   "info" : {

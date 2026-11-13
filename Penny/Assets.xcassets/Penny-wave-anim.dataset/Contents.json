@@ -1,9 +1,9 @@
 {
   "data" : [
     {
-      "filename" : "penny-wave.webp",
+      "filename" : "penny-wave.pny",
       "idiom" : "universal",
-      "universal-type-identifier" : "org.webmproject.webp"
+      "universal-type-identifier" : "public.data"
     }
   ],
   "info" : {
