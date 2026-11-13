@@ -456,7 +456,7 @@ private struct TuckedAway: View {
         VStack(spacing: 0) {
             Spacer(minLength: 24)
             ZStack {
-                PennyAnimation(clip: .bag, height: 120)
+                PennyAnimation(clip: .bag, height: 120, duration: 1)
                 Image(systemName: "sparkle").font(.system(size: 12)).foregroundStyle(Theme.starGold).offset(x: -70, y: -40)
                 Image(systemName: "sparkle").font(.system(size: 9)).foregroundStyle(Theme.glowBlue).offset(x: 66, y: -52)
             }

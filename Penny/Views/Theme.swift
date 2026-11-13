@@ -38,6 +38,7 @@ extension Color {
 /// The stars twinkle and drift a few points; with Reduce Motion they hold still.
 struct StarryTop: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
 
     private struct Star {
         let x: CGFloat, y: CGFloat, size: CGFloat
@@ -66,17 +67,41 @@ struct StarryTop: View {
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            Circle().fill(Theme.glowBlue).frame(width: 360, height: 360)
-                .blur(radius: 90).opacity(0.55).offset(x: -90, y: -130)
-            Ellipse().fill(Theme.glowPink).frame(width: 300, height: 280)
-                .blur(radius: 90).opacity(0.5).offset(x: 200, y: -70)
-            Ellipse().fill(Theme.glowPeach).frame(width: 220, height: 160)
-                .blur(radius: 80).opacity(0.4).offset(x: 120, y: 140)
-            TimelineView(.animation(minimumInterval: 1 / 30, paused: reduceMotion)) { context in
-                let t = context.date.timeIntervalSinceReferenceDate
-                ZStack(alignment: .topLeading) {
+            // The glow never changes: render it once into an image (drawingGroup) instead of
+            // re-blurring it every time a star moves. Tall enough that the blur fades out inside it.
+            ZStack(alignment: .topLeading) {
+                Circle().fill(Theme.glowBlue).frame(width: 360, height: 360)
+                    .blur(radius: 90).opacity(0.55).offset(x: -90, y: -130)
+                Ellipse().fill(Theme.glowPink).frame(width: 300, height: 280)
+                    .blur(radius: 90).opacity(0.5).offset(x: 200, y: -70)
+                Ellipse().fill(Theme.glowPeach).frame(width: 220, height: 160)
+                    .blur(radius: 80).opacity(0.4).offset(x: 120, y: 140)
+            }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .frame(height: 620, alignment: .top)
+            .drawingGroup()
+            // All stars drawn in one pass, 15 times a second (the twinkle is slow), and only while
+            // the app is on screen. Behind frosted glass every redraw also re-blurs the glass.
+            TimelineView(.animation(minimumInterval: 1 / 15, paused: reduceMotion || scenePhase != .active)) { context in
+                let t = reduceMotion ? 0 : context.date.timeIntervalSinceReferenceDate
+                Canvas { gc, _ in
+                    for (i, s) in Self.stars.enumerated() {
+                        guard let symbol = gc.resolveSymbol(id: i) else { continue }
+                        let wave = sin(t * s.speed + s.phase)                 // -1…1
+                        var g = gc
+                        g.opacity = 0.35 + 0.65 * (0.5 + 0.5 * wave)          // never fully off
+                        g.translateBy(x: s.x + s.size / 2 + 3 * sin(t * 0.25 + s.phase),
+                                      y: s.y + s.size / 2 + 2.5 * cos(t * 0.2 + s.phase * 1.3))
+                        let scale = 0.85 + 0.2 * (0.5 + 0.5 * wave)
+                        g.scaleBy(x: scale, y: scale)
+                        g.draw(symbol, at: .zero)
+                    }
+                } symbols: {
                     ForEach(Self.stars.indices, id: \.self) { i in
-                        star(Self.stars[i], t: reduceMotion ? 0 : t)
+                        Image(systemName: "sparkle")
+                            .font(.system(size: Self.stars[i].size))
+                            .foregroundStyle(Self.stars[i].color)
+                            .tag(i)
                     }
                 }
             }
@@ -85,17 +110,6 @@ struct StarryTop: View {
         .frame(height: 340, alignment: .top)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
-    }
-
-    private func star(_ s: Star, t: Double) -> some View {
-        let wave = sin(t * s.speed + s.phase)                 // -1…1
-        let twinkle = 0.35 + 0.65 * (0.5 + 0.5 * wave)        // never fully off
-        return Image(systemName: "sparkle")
-            .font(.system(size: s.size))
-            .foregroundStyle(s.color)
-            .scaleEffect(0.85 + 0.2 * (0.5 + 0.5 * wave))
-            .opacity(twinkle)
-            .offset(x: s.x + 3 * sin(t * 0.25 + s.phase), y: s.y + 2.5 * cos(t * 0.2 + s.phase * 1.3))
     }
 }
 
@@ -221,8 +235,13 @@ struct CardModifier: ViewModifier {
         content
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
-            .shadow(color: Theme.shadow.opacity(0.05), radius: 14, y: 6)
+            // The shadow belongs to the card's shape, not its contents, so an animation inside
+            // (e.g. sleeping Penny) doesn't force the shadow to be redrawn every frame.
+            .background {
+                RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
+                    .fill(Theme.card)
+                    .shadow(color: Theme.shadow.opacity(0.05), radius: 14, y: 6)
+            }
     }
 }
 
@@ -233,11 +252,20 @@ struct GlassModifier<S: InsettableShape>: ViewModifier {
     func body(content: Content) -> some View {
         content
             .background {
+                // Shadow from a solid copy of the shape with its inside cut away: it looks like the
+                // card's own shadow, but doesn't depend on what's behind or inside the glass, so it
+                // isn't redrawn whenever the stars twinkle.
+                shape.fill(Color.white)
+                    .shadow(color: Theme.shadow.opacity(0.07), radius: 16, y: 8)
+                    .mask {
+                        Rectangle().padding(-60)
+                            .overlay(shape.fill(Color.black).blendMode(.destinationOut))
+                            .compositingGroup()
+                    }
                 shape.fill(.ultraThinMaterial)
                 shape.fill(Color.white.opacity(0.45))
             }
             .overlay(shape.strokeBorder(Color.white.opacity(0.85), lineWidth: 1))
-            .shadow(color: Theme.shadow.opacity(0.07), radius: 16, y: 8)
     }
 }
 

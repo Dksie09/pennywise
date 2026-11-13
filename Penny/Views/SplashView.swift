@@ -14,8 +14,9 @@ struct SplashView: View {
                 .frame(maxHeight: .infinity, alignment: .bottom).padding(.bottom, 120)
 
             VStack(spacing: 0) {
-                PennyAnimation(clip: .eat, height: 150) {
-                    // A short beat on her happy face (or a moment to read, with Reduce Motion), then in.
+                // 1.75s of eating + a 0.25s beat on her happy face = 2s, then the app fades in.
+                PennyAnimation(clip: .eat, height: 150, duration: 1.75) {
+                    // (With Reduce Motion: a still frame and a moment to read.)
                     Task {
                         try? await Task.sleep(for: .milliseconds(reduceMotion ? 700 : 250))
                         finished()
