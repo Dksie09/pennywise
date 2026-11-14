@@ -197,7 +197,7 @@ extension MonthView {
     /// Before anything has been logged: Penny naps, and the way forward is one button.
     var firstLaunch: some View {
         VStack(spacing: 0) {
-            PennyAnimation(clip: .sleep, height: 88, loops: true)
+            SleepyPenny(height: 88)
             Text("Nothing logged yet")
                 .font(Theme.serif(28)).foregroundStyle(Theme.ink)
                 .padding(.top, 12)

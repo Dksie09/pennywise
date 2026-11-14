@@ -4,7 +4,7 @@ import ImageIO
 
 /// Penny's animated moments, stored as data assets ("Penny-<name>-anim") in Assets.xcassets.
 enum PennyClip: String {
-    case eat, sleep, wave, bag
+    case eat, sleep, wake, wave, bag
 
     var assetName: String { "Penny-\(rawValue)-anim" }
 
@@ -12,7 +12,7 @@ enum PennyClip: String {
     var aspect: CGFloat {
         switch self {
         case .eat: 405.0 / 420.0
-        case .sleep: 485.0 / 300.0
+        case .sleep, .wake: 498.0 / 300.0   // same framing, so they swap without a jump
         case .wave: 273.0 / 240.0
         case .bag: 388.0 / 360.0
         }
@@ -235,6 +235,42 @@ struct PennyAnimation: View {
         still = player.image(at: .distantFuture)   // hold exactly on the last frame
         finished = true
         onFinish?()
+    }
+}
+
+/// Sleeping Penny, looping. Tap her and she wakes with a start, glares, rolls her eyes
+/// and drifts back off; then the sleep loop carries on.
+struct SleepyPenny: View {
+    let height: CGFloat
+
+    @State private var awake = false        // the wake clip is on screen
+    @State private var sleepShown = true    // the loop underneath (hidden while she's awake)
+
+    var body: some View {
+        ZStack {
+            PennyAnimation(clip: .sleep, height: height, loops: true)
+                .opacity(sleepShown ? 1 : 0)
+            if awake {
+                PennyAnimation(clip: .wake, height: height) {
+                    // She's back asleep: bring the loop back underneath, then fade the wake clip off it.
+                    sleepShown = true
+                    withAnimation(.easeOut(duration: 0.15)) { awake = false }
+                }
+                .transition(.opacity)
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard !awake else { return }
+            // Fade the wake clip in over the sleeping loop (its first frames are still asleep),
+            // then hide the loop so only one Penny moves.
+            withAnimation(.easeIn(duration: 0.12)) { awake = true }
+            Task {
+                try? await Task.sleep(for: .milliseconds(180))
+                if awake { sleepShown = false }
+            }
+        }
+        .accessibilityHidden(true)
     }
 }
 
