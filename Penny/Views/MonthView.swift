@@ -8,6 +8,7 @@ struct MonthView: View {
     @State private var selectedDay: Date?
     @Environment(PageRouter.self) private var router
     @AppStorage("greetingDismissedDay") private var greetingDismissedDay = ""
+    @State private var greetingReplays = 0
 
     private var cal: Calendar { .current }
     private var isThisMonth: Bool { cal.isDate(month, equalTo: Date(), toGranularity: .month) }
@@ -92,7 +93,7 @@ struct MonthView: View {
         let hello = hour < 12 ? "Good morning!" : hour < 17 ? "Good afternoon!" : "Good evening!"
         let n = all.filter { $0.countsAsSpend && cal.isDateInToday($0.date) }.count
         return HStack(spacing: 10) {
-            PennyAnimation(clip: .wave, height: 42).frame(width: 48)
+            PennyAnimation(clip: .wave, height: 42, replay: greetingReplays).frame(width: 48)
             VStack(alignment: .leading, spacing: 1) {
                 Text(hello).font(.subheadline.weight(.semibold)).foregroundStyle(Theme.ink)
                 Text(n == 0 ? "Nothing spent yet today." : "\(Fmt.payments(n)) tucked away today.")
@@ -108,6 +109,10 @@ struct MonthView: View {
         }
         .padding(.leading, 6).padding(.trailing, 8).padding(.vertical, 8)
         .glass(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        // Tap the banner (anywhere but ✕) and Penny waves again.
+        .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .onTapGesture { greetingReplays += 1 }
+        .accessibilityAction(named: "Wave again") { greetingReplays += 1 }
     }
 
     // MARK: Total

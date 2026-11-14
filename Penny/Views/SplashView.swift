@@ -14,8 +14,9 @@ struct SplashView: View {
                 .frame(maxHeight: .infinity, alignment: .bottom).padding(.bottom, 120)
 
             VStack(spacing: 0) {
-                // The first 2 seconds of the clip at its natural speed, then the app fades in.
-                PennyAnimation(clip: .eat, height: 150, cut: 2) {
+                // 3s: the clip at its own speed for 1.5s, then the rest sped up into 1.5s
+                // (ending on her happy face), then the app fades in.
+                PennyAnimation(clip: .eat, height: 150, pace: PennyPace(normalFor: 1.5, restIn: 1.5)) {
                     // (With Reduce Motion: a still frame and a moment to read.)
                     Task {
                         if reduceMotion { try? await Task.sleep(for: .milliseconds(700)) }

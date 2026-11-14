@@ -55,14 +55,22 @@ final class PennyFrames: @unchecked Sendable {
     }
 }
 
+/// How a one-shot plays: its own speed for `normalFor` seconds, then the rest of the clip
+/// sped up to fit in `restIn` seconds (so it always ends on its last frame).
+struct PennyPace {
+    var normalFor: Double
+    var restIn: Double
+}
+
 /// Keeps a few decoded frames just ahead of the playhead, decoding on a background queue.
 /// The view asks for whatever frame the screen's clock says is due; if that one isn't ready yet,
 /// it gets the latest ready frame before it, so playback never waits on a decode.
 final class PennyPlayer: @unchecked Sendable {
     let frames: PennyFrames
-    let rate: Double                 // frames per second: always the clip's own speed
+    let rate: Double                 // the clip's own frames per second
     let loops: Bool
-    let count: Int                   // frames actually played (a clip can be cut short)
+    let pace: PennyPace?
+    var count: Int { frames.count }
     private(set) var start: Date?
 
     private let lock = NSLock()
@@ -71,14 +79,23 @@ final class PennyPlayer: @unchecked Sendable {
     private var lastShown: CGImage?
     private let queue = DispatchQueue(label: "penny.frames", qos: .userInitiated)
 
-    init(frames: PennyFrames, cut: Double?, loops: Bool) {
+    init(frames: PennyFrames, pace: PennyPace?, loops: Bool) {
         self.frames = frames
         self.rate = Double(frames.fps)
         self.loops = loops
-        self.count = cut.map { min(frames.count, max(1, Int(($0 * Double(frames.fps)).rounded()))) } ?? frames.count
+        self.pace = loops ? nil : pace
     }
 
-    var duration: Double { Double(count) / rate }
+    /// Frames played at normal speed before speeding up.
+    private var normalFrames: Int { pace.map { min(count, Int($0.normalFor * rate)) } ?? count }
+
+    /// Fastest frames per second this clip ever plays at (the timeline ticks at this rate).
+    var peakRate: Double {
+        guard let pace, pace.restIn > 0 else { return rate }
+        return max(rate, Double(count - normalFrames) / pace.restIn)
+    }
+
+    var duration: Double { pace.map { $0.normalFor + $0.restIn } ?? Double(count) / rate }
 
     /// Decode the first frames, then start the clock.
     func prepare() async {
@@ -92,7 +109,14 @@ final class PennyPlayer: @unchecked Sendable {
     /// Frame index due at `date` (clamped to the last frame for one-shots).
     func index(at date: Date) -> Int {
         guard let start else { return 0 }
-        let i = Int(date.timeIntervalSince(start) * rate)
+        let elapsed = date.timeIntervalSince(start)
+        var i: Int
+        if let pace, elapsed >= pace.normalFor {
+            let progress = pace.restIn > 0 ? (elapsed - pace.normalFor) / pace.restIn : 1
+            i = normalFrames + Int(progress * Double(count - normalFrames))
+        } else {
+            i = Int(elapsed * rate)
+        }
         return loops ? i % count : min(i, count - 1)
     }
 
@@ -109,7 +133,7 @@ final class PennyPlayer: @unchecked Sendable {
     }
 
     /// About a tenth of a second of frames, at least 2.
-    private var lookahead: Int { max(2, Int(rate / 10)) }
+    private var lookahead: Int { max(2, Int(peakRate / 10)) }
 
     /// How many frames after `i` frame `j` comes, counting around the loop.
     private func distance(from i: Int, to j: Int) -> Int {
@@ -140,13 +164,16 @@ final class PennyPlayer: @unchecked Sendable {
 /// Plays a Penny clip once (holding the last frame) or on a loop.
 /// Frames are picked by the screen's own clock (TimelineView), so they land in step with the display;
 /// decoding happens in the background just ahead of the playhead. A late frame is skipped, never waited for.
-/// Clips always play at their natural speed; `cut` stops a one-shot after that many seconds.
+/// `pace` plays a one-shot at normal speed for a while, then faster to the end.
+/// `replaysOnTap` plays it again when tapped; changing `replay` (from a parent) does the same.
 /// With Reduce Motion it shows a single frame: the first for loops, the last for one-shots.
 struct PennyAnimation: View {
     let clip: PennyClip
     let height: CGFloat
     var loops = false
-    var cut: Double? = nil
+    var pace: PennyPace? = nil
+    var replaysOnTap = false
+    var replay = 0
     /// Called when a one-shot clip finishes (immediately with Reduce Motion).
     var onFinish: (() -> Void)?
 
@@ -154,13 +181,14 @@ struct PennyAnimation: View {
     @State private var player: PennyPlayer?
     @State private var still: CGImage?
     @State private var finished = false
+    @State private var taps = 0
 
     var body: some View {
         Group {
             if let still {
                 frameView(still)
             } else if let player, player.start != nil {
-                TimelineView(.animation(minimumInterval: 1 / player.rate, paused: finished)) { context in
+                TimelineView(.animation(minimumInterval: 1 / player.peakRate, paused: finished)) { context in
                     frameView(player.image(at: context.date))
                 }
             } else {
@@ -169,8 +197,13 @@ struct PennyAnimation: View {
         }
         .aspectRatio(clip.aspect, contentMode: .fit)
         .frame(height: height)
+        .contentShape(Rectangle())
+        .onTapGesture { taps += 1 }
+        // Only catches taps when it replays on tap; otherwise taps go to whatever it sits in
+        // (e.g. the greeting banner, or the splash's tap-to-skip).
+        .allowsHitTesting(replaysOnTap)
         .accessibilityHidden(true)
-        .task(id: clip) { await load() }
+        .task(id: "\(clip.rawValue)-\(replay)-\(taps)") { await load() }
     }
 
     private func frameView(_ image: CGImage?) -> some View { FrameLayer(image: image) }
@@ -182,7 +215,7 @@ struct PennyAnimation: View {
             onFinish?()
             return
         }
-        let player = PennyPlayer(frames: frames, cut: cut, loops: loops)
+        let player = PennyPlayer(frames: frames, pace: pace, loops: loops)
 
         if reduceMotion {
             still = await Task.detached(priority: .userInitiated) { player.still(loops ? 0 : player.count - 1) }.value
@@ -191,6 +224,9 @@ struct PennyAnimation: View {
         }
 
         await Task.detached(priority: .userInitiated) { await player.prepare() }.value
+        // On a replay the previous last frame stays up until now, so there's no blank flash.
+        still = nil
+        finished = false
         self.player = player
         guard !loops else { return }
         // One-shots: stop the timeline on the last frame and report.
