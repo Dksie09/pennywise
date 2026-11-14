@@ -15,6 +15,7 @@ struct AddView: View {
     @State private var payee = ""               // the chosen place ("" = none yet)
     @State private var newPayee = ""
     @State private var typingPayee = false
+    @State private var autoTags: [String] = []      // tags filled in from the place's memory
     @State private var tags: [String] = []
     @State private var newTag = ""
     @State private var typingTag = false
@@ -261,6 +262,7 @@ struct AddView: View {
             .padding(.top, 8)
             .padding(.bottom, 8)
         }
+        .onChange(of: payee) { _, new in prefillTags(for: new) }
         .onChange(of: field) { old, new in
             // Leaving a field keeps what was typed, like pressing return.
             if old == .tag && new != .tag { commitTag() }
@@ -327,6 +329,15 @@ struct AddView: View {
 
     // MARK: Actions
 
+    /// Picking a place selects the tags remembered for it, unless you've already chosen tags yourself.
+    /// They're ordinary selected chips: untap any you don't want.
+    private func prefillTags(for place: String) {
+        guard tags.isEmpty || tags == autoTags else { return }
+        let remembered = TagMemory.isOn && !place.isEmpty ? TagMemory.tags(for: place, context: context) ?? [] : []
+        tags = remembered
+        autoTags = remembered
+    }
+
     private func commitPayee() {
         let name = newPayee.trimmingCharacters(in: .whitespaces)
         if !name.isEmpty { payee = name }
@@ -349,6 +360,7 @@ struct AddView: View {
         let t = Txn(date: date, amount: a, vendor: name, method: "Manual")
         t.tags = tags
         context.insert(t)
+        TagMemory.remember(t, context: context)
         try? context.save()
         field = nil
         logged = t

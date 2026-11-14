@@ -77,7 +77,7 @@ final class ParserTests: XCTestCase {
 
     @MainActor
     func testDedupeAndMerge() throws {
-        let container = try ModelContainer(for: Txn.self, Payee.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+        let container = try ModelContainer(for: Txn.self, Payee.self, PlaceTags.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
         let ctx = container.mainContext
 
         XCTAssertEqual(Ingestor.ingest(upi, context: ctx, now: now).status, .added)
@@ -105,7 +105,7 @@ final class ParserTests: XCTestCase {
 
     @MainActor
     func testSavedPayee() throws {
-        let container = try ModelContainer(for: Txn.self, Payee.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+        let container = try ModelContainer(for: Txn.self, Payee.self, PlaceTags.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
         let ctx = container.mainContext
         ctx.insert(Payee(key: "RAHUL KUMAR", name: "Therapist", defaultTag: "health"))
         try ctx.save()

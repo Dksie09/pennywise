@@ -485,6 +485,7 @@ struct TxnDetailView: View {
     private func save() {
         guard let amount = draftAmount else { return }
         addDraftTag()
+        let tagsChanged = draft.tags != txn.tags || draft.name.trimmingCharacters(in: .whitespaces) != txn.vendor
         txn.vendor = draft.name.trimmingCharacters(in: .whitespaces)
         txn.amount = amount
         txn.date = draft.date
@@ -492,6 +493,8 @@ struct TxnDetailView: View {
         txn.note = draft.note.trimmingCharacters(in: .whitespacesAndNewlines)
         if txn.type != draft.type { txn.type = draft.type }
         if draft.renameAll && canRenamePayee { rememberPayee() }
+        // The latest tags you give a place are what its future payments get.
+        if tagsChanged { TagMemory.remember(txn, context: context) }
         try? context.save()
         focus = nil
         editing = false
@@ -505,19 +508,20 @@ struct TxnDetailView: View {
     }
 
     /// Remember this name (and first tag) for the bank's payee, and apply it to past payments too.
+    /// Always show your name for this bank payee, on past payments too. Its tags become the place's
+    /// remembered tags, and past payments to it that have no tags yet get them.
     private func rememberPayee() {
         let key = Payee.key(for: txn.rawPayee)
-        let tag = txn.tags.first ?? ""
         if let p = savedPayee {
             p.name = txn.vendor
-            if !tag.isEmpty { p.defaultTag = tag }
         } else {
-            context.insert(Payee(key: key, name: txn.vendor, defaultTag: tag))
+            context.insert(Payee(key: key, name: txn.vendor))
         }
         for t in all where Payee.key(for: t.rawPayee) == key {
             t.vendor = txn.vendor
-            if !tag.isEmpty, !t.tags.contains(tag) { t.tags.append(tag) }
+            if t.tags.isEmpty { t.tags = txn.tags }
         }
+        TagMemory.remember(txn, context: context)
     }
 }
 

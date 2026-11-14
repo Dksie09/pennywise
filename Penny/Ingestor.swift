@@ -101,6 +101,7 @@ enum Ingestor {
             t.hasEmail = true
             t.receiptRef = p.ref
             t.items = p.items
+            TagMemory.apply(to: t, context: context)
             t.rawMessages = [text]
             t.hashes = [hash]
             context.insert(t)
@@ -165,12 +166,17 @@ enum Ingestor {
         t.rawPayee = p.rawPayee   // the bank's payee string is what saved names are keyed on
     }
 
+    /// Saved name for the bank's payee, then the place's remembered tags
+    /// (falling back to the payee's older single auto-tag).
     private static func applyPayee(_ t: Txn, context: ModelContext) {
         let key = Payee.key(for: t.rawPayee)
         let d = FetchDescriptor<Payee>(predicate: #Predicate { $0.key == key })
-        guard let payee = try? context.fetch(d).first else { return }
-        t.vendor = payee.name
-        if !payee.defaultTag.isEmpty, !t.tags.contains(payee.defaultTag) { t.tags.append(payee.defaultTag) }
+        let payee = try? context.fetch(d).first
+        if let payee { t.vendor = payee.name }
+        TagMemory.apply(to: t, context: context)
+        if t.tags.isEmpty, let tag = payee?.defaultTag, !tag.isEmpty, TagMemory.tags(for: t.vendor, context: context) == nil {
+            t.tags = [tag]
+        }
     }
 
     static func fingerprint(_ text: String) -> String {

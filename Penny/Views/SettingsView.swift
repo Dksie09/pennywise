@@ -8,6 +8,9 @@ struct SettingsView: View {
     @Query(sort: \Txn.date) private var all: [Txn]
     @AppStorage("usdRate") private var usdRate = 88.0
     @State private var confirmWipe = false
+    @AppStorage(TagMemory.settingKey) private var rememberTags = true
+    @State private var confirmPast = false
+    @State private var pastResult: Int?
 
     var body: some View {
         Form {
@@ -40,6 +43,15 @@ struct SettingsView: View {
                 Text("Only used for foreign receipts that haven't matched a bank SMS yet.")
             }
 
+            Section {
+                Toggle("Remember tags for each place", isOn: $rememberTags)
+                    .tint(Theme.accent)
+                Button("Tag past payments too") { confirmPast = true }
+                    .disabled(!rememberTags)
+            } header: { Text("Tags") } footer: {
+                Text("When you tag a payment, its place's new payments get the same tags. The latest tags you choose for a place are the ones used. “Tag past payments too” gives untagged past payments their place's tags; anything you've tagged stays as it is.")
+            }
+
             Section("Your data") {
                 ShareLink(item: CSVExport(txns: all), preview: SharePreview("penny.csv")) {
                     Label("Export CSV", systemImage: "square.and.arrow.up")
@@ -55,6 +67,16 @@ struct SettingsView: View {
         .pennyBackground()
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
+        .confirmationDialog("Tag past payments?", isPresented: $confirmPast, titleVisibility: .visible) {
+            Button("Tag past payments") { pastResult = TagMemory.applyToPast(context: context) }
+        } message: {
+            Text("Untagged past payments get the tags remembered for their place. Payments you've tagged stay as they are.")
+        }
+        .alert(pastResult == 0 ? "Nothing to tag" : "Done", isPresented: Binding(get: { pastResult != nil }, set: { if !$0 { pastResult = nil } })) {
+            Button("OK") { pastResult = nil }
+        } message: {
+            Text(pastResult.map { $0 == 0 ? "Every past payment with a remembered place already has tags." : "Tagged \($0) past payment\($0 == 1 ? "" : "s")." } ?? "")
+        }
         .confirmationDialog("Delete all payments and saved payees?", isPresented: $confirmWipe, titleVisibility: .visible) {
             Button("Delete everything", role: .destructive) {
                 try? context.delete(model: Txn.self)
@@ -68,17 +90,35 @@ struct SettingsView: View {
 struct PayeeEditView: View {
     @Bindable var payee: Payee
     @Query private var all: [Txn]
+    @Environment(\.modelContext) private var context
+    @State private var tagsText = ""
 
     var body: some View {
         Form {
             Section("Bank shows") { Text(payee.key).foregroundStyle(.secondary) }
             Section("Call it") { TextField("Name", text: $payee.name) }
-            Section("Auto-tag new payments") { TextField("Tag (optional)", text: $payee.defaultTag).textInputAutocapitalization(.never) }
+            Section {
+                TextField("e.g. grocery, food", text: $tagsText).textInputAutocapitalization(.never)
+            } header: { Text("Tags for new payments") } footer: {
+                Text("Separate tags with commas. Tagging one of its payments also updates this.")
+            }
         }
         .pennyBackground()
         .navigationTitle(payee.name)
+        .onAppear {
+            let remembered = TagMemory.tags(for: payee.name, context: context)
+            tagsText = (remembered ?? (payee.defaultTag.isEmpty ? [] : [payee.defaultTag])).joined(separator: ", ")
+        }
         .onDisappear {
             for t in all where Payee.key(for: t.rawPayee) == payee.key { t.vendor = payee.name }
+            let tags = tagsText.split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespaces).lowercased().replacingOccurrences(of: "#", with: "") }
+                .filter { !$0.isEmpty }
+            let key = PlaceTags.key(for: payee.name)
+            let d = FetchDescriptor<PlaceTags>(predicate: #Predicate { $0.key == key })
+            if let memory = try? context.fetch(d).first { memory.tags = tags }
+            else if !tags.isEmpty { context.insert(PlaceTags(key: key, tags: tags)) }
+            try? context.save()
         }
     }
 }
